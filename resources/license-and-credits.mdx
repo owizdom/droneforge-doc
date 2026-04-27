@@ -1,0 +1,86 @@
+---
+title: "License & Credits"
+description: "Per-repo licensing summary, plus acknowledgements."
+icon: "scale-balanced"
+---
+
+The DroneForge stack is multi-licensed: the firmware forks inherit their upstream licenses; first-party tooling is more flexible.
+
+## Licenses by repo
+
+| Repo | License |
+| --- | --- |
+| [`firmware-flasher`](https://github.com/Droneforge-Inc/firmware-flasher) | per-file (mostly first-party DroneForge) |
+| [`ExpressLRS-Fork`](https://github.com/Droneforge-Inc/ExpressLRS-Fork) | **GPL-3.0** (inherited from upstream ExpressLRS) |
+| [`betaflight-fork`](https://github.com/Droneforge-Inc/betaflight-fork) | **GPL-3.0** (inherited from upstream Betaflight) |
+| [`lerobot-fork`](https://github.com/Droneforge-Inc/lerobot-fork) | **Apache-2.0** (inherited from upstream LeRobot) |
+| [`docs`](https://github.com/Droneforge-Inc/docs) | not specified |
+| [`nimbus_sdk`](https://github.com/droneforge/nimbus_sdk) | per-file |
+
+## What this means for you
+
+### Using the firmware
+
+The ELRS and Betaflight forks are GPL-3.0. You can:
+
+- Build them.
+- Flash them on your hardware.
+- Modify them.
+- Redistribute the binaries, *as long as you publish your modifications under GPL-3.0 too*.
+
+You **cannot** ship a closed-source product based on these forks without complying with GPL-3.0's source-availability terms.
+
+### Using LeRobot
+
+LeRobot is Apache-2.0. Modify, redistribute, integrate into commercial products, with attribution. No copyleft.
+
+### Using the flasher
+
+`firmware-flasher` is mostly first-party and per-file licensed. If you're embedding the flasher in another product, check each file's header for the specific license. The vendored `esptool` is Apache-2.0.
+
+## Trademarks
+
+- **DroneForge** and **Nimbus** are product names of DroneForge.
+- **ExpressLRS**, **Betaflight**, **LeRobot**, **Hugging Face** are the trademarks of their respective projects / owners.
+
+This documentation does not grant trademark rights. You may reference the names in factual descriptions (as this site does), but commercial use of the marks requires permission from the rights-holder.
+
+## Acknowledgements
+
+The Nimbus stack rests on the labor of many people:
+
+### ExpressLRS
+
+The full ExpressLRS contributor list lives in the [project repo](https://github.com/ExpressLRS/ExpressLRS/graphs/contributors). Particular thanks to the maintainers who keep the SX1280 driver excellent.
+
+### Betaflight
+
+Origins for the project (per the upstream README):
+
+- **Alexinparis** (for MultiWii)
+- **timecop** (for Baseflight)
+- **Dominic Clifton** (for Cleanflight)
+- **borisbstyle** (for Betaflight)
+- **Sambas** (for the original STM32F4 port)
+
+…plus the active Betaflight team. See the upstream contributor list for the long, deep history.
+
+### LeRobot
+
+Hugging Face's LeRobot is the work of:
+
+> Cadene, Alibert, Soare, Gallouedec, Zouitine, Palma, Kooijmans, Aractingi, Shukor, Aubakirova, Russi, Capuano, Pascal, Choghari, Moss, Wolf
+
+…and a growing contributor community.
+
+### Nimbus
+
+DroneForge, based in El Segundo, California, designs the Nimbus product and maintains these forks. The full DroneForge team is listed at [thedroneforge.com](https://thedroneforge.com).
+
+## How to credit
+
+If you write about Nimbus in a paper, blog post, or commercial product, the recommended attribution is:
+
+> Nimbus by DroneForge ([thedroneforge.com](https://thedroneforge.com)). Built on ExpressLRS, Betaflight, and Hugging Face's LeRobot.
+
+That's both factually accurate and honors every layer.

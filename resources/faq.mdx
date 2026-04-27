@@ -1,0 +1,94 @@
+---
+title: "FAQ"
+description: "Frequent questions about Nimbus, the open-source repos, and how everything fits together."
+icon: "circle-question"
+---
+
+## What is DroneForge?
+
+DroneForge is a company building **Full-Self-Driving for Drones**. Their flagship product, *Nimbus*, is a wireless transmitter that turns off-the-shelf consumer FPV drones into programmable, agent-controlled platforms. No drone modifications required.
+
+## What is Nimbus, exactly?
+
+Nimbus is *all* of:
+
+1. A custom 2.4 GHz transmitter (ESP32-S3 + LoRa1280-TCXO).
+2. A custom firmware fork of ExpressLRS that runs on it.
+3. A custom firmware fork of Betaflight for the drone's flight controller.
+4. A desktop app where you compose visual agents and run AI vision models.
+5. The off-board policy training pipeline (LeRobot fork).
+
+When someone says "Nimbus," they usually mean the TX module, but technically the system is end-to-end.
+
+## Do I need to buy a Nimbus to use these repos?
+
+The firmware repos and `flash-helper` are usable by anyone, they're GPL/Apache/per-file open source. You can build your own clone of the Nimbus TX from the [hardware pinout](/reference/hardware-pinout). DroneForge does not currently publish reference schematics, but the JSON pinout and the ELRS fork together define the electrical interface.
+
+The desktop app is where DroneForge's commercial focus lives.
+
+## What drones work with Nimbus?
+
+Drones that:
+
+1. Have a 2.4 GHz ELRS receiver (ESP8285).
+2. Run Betaflight on a flight controller in the supported list, currently BetaFPV (G47X), Axis Flying F7 AIO, and Lionbee V2 Rev B.
+
+Most micro-Whoops fit this profile. 5"-class FPV drones with the Axis FC also work.
+
+## Can I run Nimbus's autonomy on a non-Nimbus drone?
+
+In principle: yes, at the link layer. The DroneForge ELRS fork's RX firmware is designed for the Nimbus link's specific telemetry layout (link-state, MCU UID, OPTRANGE, df_version). Stock ELRS drones won't surface those frames, so the desktop app's full feature set won't work, you'd be limited to the *standard* CRSF telemetry the drone exposes.
+
+## Why is the Betaflight fork's optical-flow driver special?
+
+Stock Betaflight doesn't ship a Micolink optical-flow driver. The DroneForge fork integrates one and tunes it (LPF on velocity, sensor-rate-aligned task scheduling) so it produces stable enough flow data for the FC to hold a hover, and so the data can be forwarded over CRSF to the host as the OPTRANGE frame.
+
+This is the difference between "drone drifts unless you stick-correct it" and "drone holds position over a textured floor."
+
+## What is `df_version`?
+
+DroneForge's own version tuple, carried in a custom telemetry frame from both the RX and the FC. Used to detect mismatched flashes, for instance, an old FC firmware paired with a new TX firmware. See [Versioning](/firmware/versioning).
+
+## Is the desktop app open source?
+
+Not currently. The Nimbus SDK ([`droneforge/nimbus_sdk`](https://github.com/droneforge/nimbus_sdk)) is open and includes the CRSF service that the app uses, but the application itself is closed-source. The firmware layer (this org) is fully open.
+
+## Where do agents get distributed?
+
+In the desktop app's **Community** tab. Anyone signed in can browse, download, or publish.
+
+## Can I use my own ML model?
+
+Yes. LeRobot's policy interface is plug-and-play; once you implement it, your model loads as a Nimbus Map "Policy" node and outputs roll/pitch/yaw/throttle/aux1 like anything else. See [Policies → Bringing your own](/autonomy/policies#bringing-your-own-policy).
+
+## How fast is the link?
+
+500 Hz on the custom "nimbus/df" rate, that's the radio side. End-to-end latency (camera frame → host inference → command at the motors) is host-bound; DroneForge has publicly described the full pipeline in the tens of milliseconds. See [Performance](/concepts/full-self-driving#performance) for what's measured versus stated.
+
+## How long is the range?
+
+Short, by design. The Nimbus TX runs at a fixed power level tuned for indoor / line-of-sight FPV. Tens to low-hundreds of meters depending on antenna and environment. Nimbus is not a long-range autopilot.
+
+## Can multiple Nimbus TXs run in the same room?
+
+Yes, that's normal multi-drone FPV territory. Each TX/drone pair has its own bind UID. The 500 Hz rate is bandwidth-efficient enough to share spectrum.
+
+## Does Nimbus work outdoors?
+
+Mechanically, yes. Indoor-vs-outdoor is more about the *drone* than Nimbus. Indoor optical-flow stabilization needs textured surfaces below; outdoors you may want GPS (which Betaflight supports and the BF fork inherits).
+
+## Is `flash-helper` safe to run on any drone?
+
+It's safe to run on the *exact* combinations DroneForge supports (Nimbus TX + ESP8285 ELRS RX + BetaFPV/Axis/Lionbee FC). The flasher checks for matching DFU device IDs and known FC chip families and refuses to write into anything it doesn't recognize. But it's a flasher, it can brick a board if you point it at the wrong one. Read [Flashing the FC → Robustness notes](/flasher/flashing-fc#robustness-notes).
+
+## How do I report a bug?
+
+GitHub Issues on the relevant repo:
+
+- [`firmware-flasher` issues](https://github.com/Droneforge-Inc/firmware-flasher/issues)
+- [`ExpressLRS-Fork` issues](https://github.com/Droneforge-Inc/ExpressLRS-Fork/issues)
+- [`betaflight-fork` issues](https://github.com/Droneforge-Inc/betaflight-fork/issues)
+- [`lerobot-fork` issues](https://github.com/Droneforge-Inc/lerobot-fork/issues)
+- [`nimbus_sdk` issues](https://github.com/droneforge/nimbus_sdk/issues)
+
+For desktop-app bugs, open one on `nimbus_sdk` or contact DroneForge directly through [thedroneforge.com](https://thedroneforge.com).

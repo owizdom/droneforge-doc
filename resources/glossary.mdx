@@ -1,0 +1,157 @@
+---
+title: "Glossary"
+description: "Every acronym, name, and term that shows up in the Nimbus stack, defined in one place."
+icon: "book-bookmark"
+---
+
+A single-page lookup for vocabulary you'll meet across these docs.
+
+## A
+
+**ACT**. Action Chunking Transformer. An imitation-learning policy in LeRobot that predicts a chunk of future actions per observation.
+
+**Agent**. A node graph in the Nimbus Map. Reads sensors / vision, computes via expressions, emits `roll/pitch/yaw/throttle/aux1` from a single control node.
+
+**Aux1 / Aux2**. Auxiliary RC channels. Aux1 is conventionally arming; aux2 is conventionally flight mode (`acro` / `angle` / `horizon`).
+
+**Axis Flying F7 AIO**. A flight-controller variant DroneForge supports. STM32 F7X2.
+
+## B
+
+**BBS**. The backplane bus the Nimbus TX uses to drive its 5.8 GHz VRX module. Implemented over SPI.
+
+**Betaflight**. Open-source flight-controller firmware. DroneForge maintains a customized fork on `nimbus/main`.
+
+**BetaFPV (Whoop)**. A flight-controller variant DroneForge supports. STM32 G47X.
+
+**Binding**. The pairing operation between Nimbus TX and a drone's ELRS RX.
+
+## C
+
+**CRSF (Crossfire)**. The serial protocol used between Nimbus and the FC. Frames are sync (`0xC8`), length, type, payload, CRC-8.
+
+**Control node**. The single sink in every agent. Outputs `roll`, `pitch`, `yaw`, `throttle`, `aux1`, `aux2`.
+
+## D
+
+**DepthAnything**. Depth-estimation model exposed as a Nimbus vision mode. Surfaces `nav_*` variables in expressions.
+
+**DFU**. USB Device Firmware Upgrade. The protocol Betaflight FCs enter to receive a new firmware over USB.
+
+**`df_version`**. DroneForge-specific (hardware version, firmware version) tuple, carried as a telemetry frame and used to detect mismatches.
+
+**`dfu-util`**. Reference open-source DFU client. The flasher bundles it (or finds it on `PATH`).
+
+**DroneForge**. The company. El Segundo, CA.
+
+## E
+
+**ELRS / ExpressLRS**. Open-source RC link based on the SX12xx LoRa chips. The Nimbus link is a customized 2.4 GHz ELRS variant.
+
+**EKF**. Extended Kalman Filter. The state estimator Betaflight uses for attitude/velocity. The DroneForge BF fork ships builds with raw IMU exposed for EKF use.
+
+**ESP32-S3**. The MCU on the Nimbus TX board.
+
+**ESP8285**. The MCU on most 2.4 GHz ELRS RX boards (drone side).
+
+**`esptool`**. Reference ESP32/ESP8266 flashing tool. Vendored into `flash-helper`.
+
+## F
+
+**Failsafe**. The behavior the FC exhibits when the RC link drops. Configured in Betaflight; not changed by the DroneForge fork.
+
+**FC**. Flight controller (Betaflight here).
+
+**`flash-helper`**. The user-facing CLI for flashing TX / RX / FC. Built from `firmware-flasher`'s Python sources via PyInstaller.
+
+**FPV**. First-Person View. The class of small drones with a camera + analog video downlink that Nimbus targets.
+
+**FSD**. Full-Self-Driving. DroneForge's pitch for the Nimbus stack.
+
+## G
+
+**GR00T**. NVIDIA's humanoid foundation model. Available as a policy in LeRobot.
+
+## H
+
+**HIL-SERL**. Human-in-the-Loop SAC for real-robot RL. Ships in LeRobot.
+
+## L
+
+**LeRobot**. Hugging Face's robotics library. The DroneForge fork is `lerobot-fork`.
+
+**LeRobotDataset**. The Parquet-+-MP4 dataset format LeRobot uses.
+
+**Lionbee V2 Rev B**. A flight-controller variant DroneForge supports.
+
+**LoRa**. Long-range radio modulation used by ELRS / Nimbus on 2.4 GHz.
+
+## M
+
+**MCU UID**. Per-chip unique ID. The ESP8285 RX exposes its 6-byte UID on a Nimbus telemetry frame so the host can recognize a specific drone.
+
+**Micolink**. The communication protocol used by the MTF-class optical-flow / range sensors. The BF fork includes a Micolink driver.
+
+**MTF**. A range/optical-flow sensor module Betaflight talks Micolink to.
+
+## N
+
+**Nimbus**. DroneForge's flagship product. The TX is the user-facing device; the drone-side firmware completes the system.
+
+**`nimbus/main`**. Default branch on both ExpressLRS-Fork and betaflight-fork. Where DroneForge customizations land.
+
+**Nimbus Map**. The node-graph agent system inside the desktop app.
+
+## O
+
+**Optical flow**. Per-pixel motion estimation from a downward-facing camera, used for hover stability. The BF fork integrates Micolink-protocol optical flow.
+
+**OPTRANGE**. The CRSF telemetry frame the BF fork sends with optical-flow + range data. Surfaces in agents as `optrange_*` variables.
+
+## P
+
+**Passthrough**. Betaflight's mode that exposes the FC's RX UART as a serial-bridge for flashing the RX over the FC's USB connection.
+
+**Pi0 / Pi0.5**. Physical Intelligence's flow-matching VLA models, ported to LeRobot.
+
+**PIO / PlatformIO**. The build system ELRS uses.
+
+**PID**. Proportional-Integral-Derivative controller. Available as a built-in expression function.
+
+## R
+
+**RC**. Radio Control.
+
+**RX**. Receiver. The drone-side ELRS receiver.
+
+## S
+
+**Scan**. The desktop app's automated VRX channel-finding flow.
+
+**SmolVLA**. A small VLA in LeRobot suitable for laptop-class GPUs.
+
+**SPI**. Serial Peripheral Interface. Used between MCU and SX1280, and over the BBS bus to the VRX.
+
+**SX1280**. The Semtech LoRa chip on the Nimbus TX.
+
+## T
+
+**TCXO**. Temperature-compensated crystal oscillator. The SX1280's TCXO is power-gated on GPIO 5 of the Nimbus TX.
+
+**TX**. Transmitter. The Nimbus TX is the desk-side device.
+
+## V
+
+**VIHO**. Visual-inertial height observer. Estimates floor / ceiling distances from vision + IMU. Surfaces as `floor_distance`, `ceiling_distance`, `viho_height`, `height_data_valid` in agents.
+
+**VLA**. Vision-Language-Action. A class of policies that condition on natural-language instructions.
+
+**VRX**. Video Receiver. The 5.8 GHz video receiver on the Nimbus TX module.
+
+**VTX**. Video Transmitter. The 5.8 GHz video transmitter on the drone.
+
+## W
+
+**Whoop**. Slang for a tiny enclosed FPV drone (BetaFPV's product line is the canonical example). The default Nimbus target.
+
+**YOLOv11**. Object-detection model exposed as a Nimbus vision mode. Surfaces `target_*` variables in expressions.

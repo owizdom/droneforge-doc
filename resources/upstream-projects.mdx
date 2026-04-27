@@ -1,0 +1,89 @@
+---
+title: "Upstream Projects"
+description: "Credit where it's due. The open-source giants the DroneForge stack stands on, with links and license info."
+icon: "people-group"
+---
+
+DroneForge's firmware layer is built on the work of three exceptional open-source communities. Without them, Nimbus does not exist. This page lists each, what they do, and how the DroneForge fork relates.
+
+## ExpressLRS
+
+| | |
+| --- | --- |
+| **Project** | [ExpressLRS](https://github.com/ExpressLRS/ExpressLRS) |
+| **Website** | [expresslrs.org](https://www.expresslrs.org/) |
+| **License** | GPL-3.0 |
+| **Discord** | [discord.gg/expresslrs](https://discord.gg/expresslrs) |
+| **Donations** | [Open Collective](https://opencollective.com/expresslrs) |
+
+ExpressLRS is one of the world's lowest-latency open-source RC links. Built on Semtech SX127x / SX1280 LoRa hardware. Supports up to 1000 Hz packet rate, telemetry, WiFi updates, OLED / TFT displays, dual-band, and dozens of supported hardware targets.
+
+DroneForge's ELRS fork tracks `master` periodically, with Nimbus-specific changes layered on the `nimbus/main` branch. PRs that make sense upstream go upstream.
+
+## Betaflight
+
+| | |
+| --- | --- |
+| **Project** | [Betaflight](https://github.com/betaflight/betaflight) |
+| **Website** | [betaflight.com](https://betaflight.com/) |
+| **License** | GPL-3.0 |
+| **Discord** | [discord.gg/n4E6ak4u3c](https://discord.gg/n4E6ak4u3c) |
+| **Donations** | [PayPal](https://paypal.me/betaflight) / [Patreon](https://www.patreon.com/betaflight) |
+
+Betaflight is the dominant FPV flight-controller firmware. Forked from Cleanflight, which itself was forked from Baseflight. Supports STM32 F4 / G4 / F7 / H7 targets, every modern motor protocol (DShot, Multishot, ProShot1000), Blackbox logging, configurable serial ports, OSD, and a plethora of telemetry protocols including CRSF.
+
+DroneForge's Betaflight fork is `nimbus/main` and adds the optical-flow + OPTRANGE + Axis + `df_version` features described in [Betaflight fork](/firmware/betaflight). It tracks Betaflight 4.5.x.
+
+## LeRobot
+
+| | |
+| --- | --- |
+| **Project** | [LeRobot](https://github.com/huggingface/lerobot) |
+| **Documentation** | [huggingface.co/docs/lerobot](https://huggingface.co/docs/lerobot/index) |
+| **License** | Apache-2.0 |
+| **Discord** | [discord.gg/q8Dzzpym3f](https://discord.gg/q8Dzzpym3f) |
+| **Tutorial** | [Robot Learning Tutorial](https://huggingface.co/spaces/lerobot/robot-learning-tutorial) |
+
+LeRobot, by Hugging Face, is the standard library for real-world robotics in PyTorch. Provides a hardware-agnostic Robot interface, the LeRobotDataset format (Parquet + MP4), and SoTA policies (ACT, Diffusion, VQ-BeT, Pi0/Pi0.5, SmolVLA, GR00T, XVLA, HIL-SERL, TDMPC).
+
+DroneForge's LeRobot fork tracks upstream closely. The fork exists for version pinning per Nimbus desktop-app release, not for divergent design.
+
+### Citation
+
+LeRobot is academically significant. If you use it (including via Nimbus), the upstream maintainers ask for the standard citation:
+
+```bibtex
+@misc{cadene2024lerobot,
+  author = {Cadene, Remi and Alibert, Simon and Soare, Alexander and Gallouedec, Quentin and Zouitine, Adil and Palma, Steven and Kooijmans, Pepijn and Aractingi, Michel and Shukor, Mustafa and Aubakirova, Dana and Russi, Martino and Capuano, Francesco and Pascal, Caroline and Choghari, Jade and Moss, Jess and Wolf, Thomas},
+  title = {LeRobot: State-of-the-art Machine Learning for Real-World Robotics in Pytorch},
+  howpublished = "\url{https://github.com/huggingface/lerobot}",
+  year = {2024}
+}
+```
+
+## Other dependencies
+
+The flasher additionally relies on:
+
+| Project | Role |
+| --- | --- |
+| [esptool](https://github.com/espressif/esptool) | ESP32 / ESP8266 flashing. Vendored into `flash-helper`. |
+| [dfu-util](https://dfu-util.sourceforge.net/) | STM32 DFU client. Bundled or resolved from `PATH`. |
+| [PyInstaller](https://pyinstaller.org/) | Builds `flash-helper` into a single binary. |
+| [pyserial](https://github.com/pyserial/pyserial) | Cross-platform serial I/O. |
+
+For the firmware:
+
+| Project | Role |
+| --- | --- |
+| [PlatformIO](https://platformio.org/) | ELRS build system. |
+| [ESP-IDF](https://github.com/espressif/esp-idf) | Underlies ESP32-S3 toolchain. |
+| [arm-none-eabi-gcc](https://gcc.gnu.org/) | Betaflight toolchain. |
+
+## How DroneForge contributes back
+
+- **Issues and PRs** to upstream projects when changes generalize beyond Nimbus.
+- **Public source** for everything DroneForge ships, in this org and `droneforge/nimbus_sdk`.
+- **Documentation** (this site) that links back to upstream docs and credits authors.
+
+If you use these tools, consider supporting their maintainers, even a small contribution to ELRS Open Collective, the Betaflight Patreon, or a star on LeRobot meaningfully sustains the projects.

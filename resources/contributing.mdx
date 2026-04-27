@@ -1,0 +1,98 @@
+---
+title: "Contributing"
+description: "How to file issues, propose changes, and rebase against upstream, across all the DroneForge repos."
+icon: "code-pull-request"
+---
+
+The Nimbus stack is a *constellation* of repositories, each with its own conventions. This page is a single place to start.
+
+## Where to file an issue
+
+| Issue is about… | Repo |
+| --- | --- |
+| The flasher CLI, build, or `update.sh` | [`firmware-flasher`](https://github.com/Droneforge-Inc/firmware-flasher/issues) |
+| ELRS firmware (TX or RX) | [`ExpressLRS-Fork`](https://github.com/Droneforge-Inc/ExpressLRS-Fork/issues) |
+| Betaflight firmware (FC) | [`betaflight-fork`](https://github.com/Droneforge-Inc/betaflight-fork/issues) |
+| Policy training, LeRobot integration | [`lerobot-fork`](https://github.com/Droneforge-Inc/lerobot-fork/issues) |
+| Desktop app behavior / SDK | [`nimbus_sdk`](https://github.com/droneforge/nimbus_sdk/issues) |
+| The expression-language spec | [`docs`](https://github.com/Droneforge-Inc/docs/issues) |
+| These docs (Mintlify) | [`docs`](https://github.com/Droneforge-Inc/docs/issues) (or wherever this site is hosted) |
+
+When in doubt: *the layer closest to where the bug manifests* is the right place. A flasher error pointing at FC DFU is a flasher issue; the same error pointing at "DFU device disappears mid-flash" might be a BF firmware issue.
+
+## Pull-request flow
+
+### Forks
+
+1. Fork the relevant repo to your account.
+2. Branch from the default (`main` or `nimbus/main`).
+3. Use a descriptive branch name: `feat/<thing>`, `fix/<thing>`, `docs/<thing>`.
+4. Open the PR against `main` / `nimbus/main` of the upstream repo.
+
+### Sign your commits
+
+DroneForge does not require signed commits, but it appreciates them. Use `git commit -S` if you have a GPG key set up.
+
+### Keep PRs focused
+
+One concern per PR. A PR that touches the flasher *and* the ELRS firmware is two PRs.
+
+### CI
+
+| Repo | CI |
+| --- | --- |
+| `firmware-flasher` | GitHub Actions: native macOS / Linux / Windows builds + `python -m unittest discover -s tests` + `--help` smoke test. |
+| `ExpressLRS-Fork` | (inherits upstream's PIO build matrix) |
+| `betaflight-fork` | (inherits upstream's make matrix) |
+| `lerobot-fork` | (inherits upstream's pytest matrix) |
+
+Make sure CI passes before requesting a review.
+
+## Specific contribution paths
+
+### Adding a new FC variant to the Betaflight fork
+
+1. Add the target in `betaflight-fork/src/main/target/<NEW_TARGET>/`.
+2. Add the optical-flow + OPTRANGE + `df_version` integration on top, mirroring `STM32G47X_BETAFPVG473`.
+3. Add a CLI config preset under `utils/config/` (`<variant>-of.txt`).
+4. In `firmware-flasher/update.sh`, add the new variant to the matrix and provide the env-var overrides.
+5. Update the [Supported flight controllers](/hardware/flight-controllers) doc in this site.
+
+### Adding a new TX hardware target to the ELRS fork
+
+1. Add a JSON file under `src/hardware/TX/<your target>.json` modeled on `DIY S3 Nimbus.json`.
+2. Confirm the ESP32-S3 / SX1280 pin assignments compile and bind.
+3. Submit a PR. DroneForge will decide whether to include it in CI builds.
+
+### Adding an expression function
+
+1. Open a PR against the **runtime** (in `nimbus_sdk`).
+2. Update the spec in [`Droneforge-Inc/docs/expression_rules_v0.2.0.md`](https://github.com/Droneforge-Inc/docs/blob/main/expression_rules_v0.2.0.md), bump the version (v0.3.0).
+3. Add an entry to [Functions](/agents/functions) in this site.
+
+### Adding a sensor variable
+
+1. Add the telemetry frame on the firmware side (BF or ELRS).
+2. Parse it in `droneforge-crsf-service`.
+3. Surface it in the agent runtime as a named variable.
+4. Add an entry to [Inputs and variables](/agents/inputs-and-variables) here.
+5. Bump `df_version`.
+
+## Style
+
+| Layer | Style |
+| --- | --- |
+| Python (flasher, lerobot-fork) | Black + isort. PEP 8. |
+| C (Betaflight) | Upstream Betaflight style. See [Betaflight Coding Style](https://betaflight.com/docs/development/CodingStyle). |
+| C++ (ELRS, nimbus_sdk) | Upstream ExpressLRS style for the ELRS fork. clang-format for nimbus_sdk. |
+| MDX (this site) | Sentence-case headings, callouts (Note/Warning/Tip), Mintlify components for richness. |
+
+## Don't
+
+- Don't open a PR that adds *both* a feature and a refactor. Split.
+- Don't squash-merge upstream commits into the fork, preserve their history when rebasing.
+- Don't introduce a new dependency in `flash-helper` without justification (the binary is shipped to end users).
+
+## Code of conduct
+
+DroneForge expects respectful, technically-focused collaboration. The upstream projects (ExpressLRS, Betaflight, LeRobot, ESP-IDF) all have their own CoCs; DroneForge inherits the spirit.

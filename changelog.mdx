@@ -1,0 +1,68 @@
+---
+title: "Changelog"
+description: "Notable changes across the DroneForge open-source repos. The authoritative log is the GitHub commit and release history of each repo."
+icon: "clock-rotate-left"
+---
+
+The Nimbus stack ships from five repositories, each with its own release cadence. This page summarizes notable changes; for the complete history, the GitHub commit log on each repo is authoritative.
+
+## How `df_version` works
+
+`df_version` is the single number that tells you whether a flashed Nimbus + drone are consistent. When the wire format, a hardware target's pinout, or an agent-runtime input variable changes, `df_version` is bumped. The desktop app surfaces a green check when both sides match the version it was built against.
+
+See [Versioning](/firmware/versioning) for how the host consumes the frame.
+
+## Recent themes
+
+Rather than a per-version list (which is faster than this site can keep up with), here are the themes that have driven recent commits in each repo. For exact dates and SHAs, follow the linked commit feeds.
+
+### firmware-flasher
+
+[Commit feed](https://github.com/Droneforge-Inc/firmware-flasher/commits/main)
+
+- DFU robustness: before/after device-list diff, device-ID check, sleep before RX bootloader reset.
+- Linux baud-retry on passthrough: `errno=22` triggers fallback through `420000 → 230400 → 115200`.
+- Bins refreshed alongside firmware fork bumps; Nimbus + drone artifacts kept consistent.
+- TX bind-set support added to the bins.
+
+### ExpressLRS-Fork (`nimbus/main`)
+
+[Commit feed](https://github.com/Droneforge-Inc/ExpressLRS-Fork/commits/nimbus/main)
+
+- `df_version` (PR #5).
+- MCU-UID frame (PR #7 / `feat/mcu-uid-frame`).
+- Link-state telemetry frame (PR #4).
+- 500 Hz "nimbus/df" custom rate (PR #2).
+- VRX SPI/BBS channel selection across 48 channels (PR #1).
+- TX power increase, default binding phrase, scan-stability fixes.
+
+### betaflight-fork (`nimbus/main`)
+
+[Commit feed](https://github.com/Droneforge-Inc/betaflight-fork/commits/nimbus/main)
+
+- Optical-flow driver, Micolink protocol (PR #4).
+- Always-Micolink at task init (PR #5).
+- `df_version` integrated into the version frame (PR #6).
+- OPTRANGE telemetry frame forwarding to host.
+- Vario + disarmed-vspd telemetry.
+- Axis Flying F7 AIO target added; Lionbee carve-outs landed.
+
+### lerobot-fork
+
+[Commit feed](https://github.com/Droneforge-Inc/lerobot-fork/commits/main)
+
+- Tracks Hugging Face's `lerobot` upstream closely.
+- Pinned to a known-good commit per Nimbus desktop-app release. Re-merges from upstream happen periodically.
+
+### nimbus_sdk
+
+[Commit feed](https://github.com/droneforge/nimbus_sdk/commits/main)
+
+- Tracks the desktop app's UX surface area. README is the canonical user guide.
+- `droneforge-crsf-service` evolves with frame-format changes on the firmware side.
+
+## How to be notified
+
+- Watch each repo on GitHub (Releases or All activity).
+- The desktop app surfaces a banner when a `df_version` mismatch is detected after a flash; that's the practical signal you need to update.
+- Subscribe to [@thedroneforge](https://x.com/thedroneforge) for product-level announcements.
