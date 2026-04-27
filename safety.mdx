@@ -1,0 +1,76 @@
+---
+title: "Safety"
+description: "Read this before flying. Drone autonomy is fun and powerful. It is also genuinely dangerous when treated casually."
+icon: "shield-halved"
+---
+
+A Nimbus-controlled drone is a programmable physical actuator. Like any RC aircraft it can hurt people, damage property, and break itself. Layered on top of that, an autonomous agent can produce surprising commands the moment you save an expression. This page is the contract you sign with yourself before pressing **Play**.
+
+## Before every flight
+
+<Steps>
+  <Step title="Have a hardware kill-switch">
+    The desktop app's **Pause** button stops the agent and reverts to the FC's failsafe, but it is software. Keep a hardware arm/disarm switch within reach. On most setups this means a backup transmitter bound to the same RX, or an aux switch you can toggle from a phone app paired to the drone. If you can't kill the motors without your laptop, do not fly.
+  </Step>
+  <Step title="Test in a soft, open area">
+    Carpeted indoor space, tall grass, or a netted FPV cage. Never on a hard floor for the first runs of a new agent. Never above people, pets, glass, or anything you cannot afford to break.
+  </Step>
+  <Step title="Verify channels before arming">
+    The Deploy tab's four-channel status indicator must track the agent's outputs as expected when sticks are at center. If your `aux1` reads `1800` before you intended to arm, fix the agent first.
+  </Step>
+  <Step title="Read the agent">
+    Especially when downloading from the Community tab. Other people's agents may set `aux1 = 1800` on tick 0, may have `throttle = 600` baked in, may assume optical flow is present. Read every expression before deploying.
+  </Step>
+  <Step title="Battery and props checked">
+    Standard FPV pre-flight: secure props, charged battery, antennas seated, no debris. Optical-flow stabilization can mask wobbly props for a few seconds before they fail loudly.
+  </Step>
+</Steps>
+
+## In the agent
+
+Build defensively:
+
+- **Validity-gate every sensor.** `if(target_visible, ..., 992)`, `if(flow_valid, ..., 992)`. A missing `*_valid` check is how an agent ends up commanding full pitch into a wall during a vision dropout.
+- **Cap PID outputs.** Pass an explicit `max_output` to every `pid(...)` call. `pid(setpoint, pv, kp, ki, kd, 300)` saturates at ±300 around 992. Without it the integral term can wind up.
+- **Latch arming carefully.** `aux1 = mem(1800, condition, 0, 1)` should latch only on a deliberate condition you've tested.
+- **Ramp throttle, don't step it.** `lin(172, hover_throttle, 1.5)` is much safer than `throttle = 600`.
+- **Failsafe deliberately.** The control node has no built-in failsafe. The FC's failsafe (`failsafe_*` in Betaflight CLI) is your last line. Configure it. Test it.
+
+## Failsafe behavior
+
+If the link drops mid-flight, control flows to **Betaflight's failsafe**, not the agent. The DroneForge fork does not change Betaflight's failsafe semantics. Standard options apply:
+
+| Failsafe | Behavior |
+| --- | --- |
+| `DROP` | Cut motors. Drone falls. |
+| `LAND` | Slowly throttle to 1000 over `failsafe_off_delay`. Drone descends. |
+| `GPS_RESCUE` | Return to home (requires GPS module). |
+| `AUTO` | Default. Currently equivalent to `LAND` on most builds. |
+
+Set this in Betaflight Configurator (Failsafe tab) before flying. Test it on the bench by powering the TX off mid-flight, on a propless drone, and confirming the FC enters the expected mode.
+
+## Regulatory responsibility
+
+DroneForge does not absolve you of any of the rules that apply to flying RC aircraft in your jurisdiction. The exact rules vary, but in most places at least one of the following applies:
+
+- **Line of sight.** The pilot in command must keep the aircraft visible at all times. A laptop screen is not line of sight.
+- **No-fly zones.** Airports, military installations, government buildings, public events. Apps like B4UFLY (US) or local equivalents will tell you.
+- **Altitude limits.** Many places cap recreational flight at 400 ft (US), 120 m (EU). Indoor flight is unrestricted in most jurisdictions but check.
+- **Registration.** Drones over a weight threshold (250 g in many places) typically require registration with a national aviation authority.
+- **Commercial rules.** Filming for money, surveying, and any "payload" use cases trigger commercial licensing requirements (US Part 107, EU A2/A3 Open / Specific). Recreational rules do not cover these.
+
+You are responsible for knowing the rules where you fly. The Nimbus product is sold for indoor, line-of-sight FPV use; using it differently is on you.
+
+## When something goes wrong
+
+If a flight ends badly:
+
+1. **Cut power immediately.** The Pause button if you can reach it; the kill-switch if you can't.
+2. **Disconnect the battery** before approaching the drone. A "stopped" drone with prop-out can spin up if a thermal cutoff trips.
+3. **Inspect props, motors, frame.** Hairline cracks on prop hubs become catastrophic on the next flight.
+4. **Capture the Flight tab recording.** The host log includes the exact command stream the agent emitted. This is invaluable for diagnosing the root cause.
+5. **Don't just re-fly.** If the failure is unexplained, fly the same agent on the bench (motors off) until you've reproduced or ruled out the symptom.
+
+## Reporting issues
+
+If you find a safety-relevant bug in the firmware, the flasher, or an agent the desktop app distributes by default, report it to DroneForge directly through the [website](https://thedroneforge.com), or open a GitHub issue tagged `safety` on the relevant repository in the [Droneforge-Inc](https://github.com/Droneforge-Inc) org. For a non-public security-class concern, prefer email to a maintainer over a public issue.

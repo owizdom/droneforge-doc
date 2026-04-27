@@ -1,0 +1,50 @@
+---
+title: "FULL-SELF-DRIVING FOR DRONES"
+description: "Plug-and-play autonomy that adapts to your drone and use case."
+sidebarTitle: "Welcome"
+icon: "house"
+mode: "wide"
+---
+
+**Nimbus** is a wireless autonomy module for off-the-shelf FPV drones. Plug it into your PC, bind it to your drone, compose an agent, and fly.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Flash a Nimbus, bind a drone, run your first agent. About 30 minutes.
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/concepts/architecture">
+    How Nimbus, your drone, and the desktop app form a closed loop.
+  </Card>
+</CardGroup>
+
+## Build
+
+<CardGroup cols={3}>
+  <Card title="Compose an agent" icon="diagram-project" href="/agents/overview">
+    Visual node graph. Connect blocks, write expressions, drop in YOLOv11 or DepthAnything.
+  </Card>
+  <Card title="Train a policy" icon="brain" href="/autonomy/overview">
+    Record flights, build a LeRobotDataset, train ACT / Diffusion / SmolVLA / Pi0.
+  </Card>
+  <Card title="Use the SDK" icon="puzzle-piece" href="/sdk/overview">
+    Official Nimbus SDK and the bundled CRSF service.
+  </Card>
+</CardGroup>
+
+## Reference
+
+<CardGroup cols={3}>
+  <Card title="Flasher CLI" icon="bolt" href="/flasher/overview">
+    `flash-helper` for TX, RX, and FC.
+  </Card>
+  <Card title="Hardware" icon="microchip" href="/hardware/overview">
+    Nimbus TX, drone RX, supported FCs.
+  </Card>
+  <Card title="Firmware forks" icon="memory" href="/firmware/overview">
+    ExpressLRS, Betaflight, df_version.
+  </Card>
+</CardGroup>
+
+<Note>
+  These docs are produced from the public source of the [Droneforge-Inc](https://github.com/Droneforge-Inc) GitHub org and the [`droneforge/nimbus_sdk`](https://github.com/droneforge/nimbus_sdk). Everything is verifiable against the code; speculative content is marked.
+</Note>

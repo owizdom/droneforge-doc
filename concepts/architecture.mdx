@@ -1,0 +1,42 @@
+---
+title: "Architecture"
+description: "Four layers, top to bottom. The host runs the agent, the link carries channels, the drone executes."
+icon: "diagram-project"
+---
+
+Nimbus is a four-layer system. Each layer has one job.
+
+| Layer | Role | Lives on | Source |
+| --- | --- | --- | --- |
+| **Agent runtime** | Node graph + AI vision + expression evaluator. Produces `roll/pitch/yaw/throttle/aux1` per frame. | Host (desktop app) | [`nimbus_sdk`](https://github.com/droneforge/nimbus_sdk) |
+| **Nimbus TX** | Custom ELRS transmitter. 2.4 GHz LoRa, 500 Hz custom rate. | ESP32-S3 + LoRa1280-TCXO | [`ExpressLRS-Fork`](/firmware/expresslrs) |
+| **Drone RX** | ELRS receiver. Hands CRSF to the FC. | ESP8285 | [`ExpressLRS-Fork`](/firmware/expresslrs) |
+| **Flight controller** | Closed-loop attitude/rate control + optical-flow stabilization. | STM32 G47X / F7X2 | [`betaflight-fork`](/firmware/betaflight) |
+
+Trained policies plug in as nodes from a separate offline pipeline ([`lerobot-fork`](/autonomy/overview)).
+
+## What flies down the link
+
+Only `roll`, `pitch`, `yaw`, `throttle`, `aux1` (CRSF range 172 to 1811). Everything else (perception, reasoning, agent state) lives on the host. The drone is a thin actuator.
+
+## Why a forked stack
+
+Three deliberate choices:
+
+<CardGroup cols={3}>
+  <Card title="ExpressLRS fork" icon="tower-broadcast" href="/firmware/expresslrs">
+    Fixed Nimbus TX target, custom 500 Hz rate, link-state and `df_version` telemetry.
+  </Card>
+  <Card title="Betaflight fork" icon="microchip" href="/firmware/betaflight">
+    Optical-flow driver, OPTRANGE telemetry, BetaFPV / Axis F7 / Lionbee variants.
+  </Card>
+  <Card title="LeRobot fork" icon="brain-circuit" href="/autonomy/overview">
+    Pinned to a known-good commit per Nimbus release; drone-specific glue layered on.
+  </Card>
+</CardGroup>
+
+In all three cases the fork is a choice for product reliability, not a hostile divergence. PRs that generalize beyond Nimbus go upstream. See [Upstream projects](/resources/upstream-projects).
+
+## Performance
+
+For latency claims and what's actually measured versus stated, see [Performance](/concepts/full-self-driving#performance).

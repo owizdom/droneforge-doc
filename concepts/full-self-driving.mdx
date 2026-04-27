@@ -1,0 +1,65 @@
+---
+title: "Full-Self-Driving for Drones"
+description: "What 'FSD for drones' means at DroneForge, and what makes Nimbus's approach different from PX4-style autopilots or DJI's locked-down stacks."
+icon: "wand-magic-sparkles"
+---
+
+DroneForge's tagline is plain: *Full-Self-Driving for Drones*. Behind it is an engineering bet: that a low-latency perception-to-control pipeline on a host PC, talking down a custom 2.4 GHz radio link, can fly an off-the-shelf FPV drone autonomously without rewiring it.
+
+## The thesis
+
+Most "autonomous" drones today fall into one of three buckets:
+
+1. **Pro autopilots** (PX4, ArduPilot), generic, capable, but require a specific airframe, time, and patience. Sensor wiring, calibration, flashing, parameter tuning.
+2. **Locked platforms** (DJI consumer, some industrial), easy to use, hard to program. Their autonomy is a black box.
+3. **Research rigs** (Vicon rooms, Jetson companion computers, ROS), flexible, but you pay for it in weight, power, and fragility.
+
+Nimbus carves a fourth path: keep the *drone* unmodified. Move all the autonomy off-board onto a host PC where you have GPUs, weeks of disk, and the full Python ecosystem. Use a **fast, custom radio link** as the closed-loop control channel. Treat the drone as a *thin actuator*: it receives rates and angles, runs a tight PID inner loop on Betaflight, and sends back a video and a small telemetry frame.
+
+## Performance
+
+DroneForge has publicly described an end-to-end FSD pipeline in the *tens of milliseconds*, with public messaging on social channels using the phrase "sub 40 ms," accompanying demonstrations of natural-language prompts (e.g. *"find the bike and land"*) running in real time on consumer FPV drones. Treat exact numbers in this site as **statements relayed from those public sources**, not as measurements taken in this documentation. If you need precise latency budgets for a specific Nimbus build, capture them yourself: timestamp at the host before USB write, on the FC at command receipt (CRSF parser callback), and at the motor-command stage. The link rate (500 Hz) sets the floor; everything above it is host-side, and depends on your GPU and which AI vision modes are enabled.
+
+## Why this works
+
+Three things have to be true for off-board autonomy to win:
+
+<Steps>
+  <Step title="The link has to be fast and predictable">
+    The Nimbus TX runs at **500 Hz** on a custom ELRS rate ("nimbus/df"). End-to-end latency from host command to motor output is dominated by host-app inference, not the link.
+  </Step>
+  <Step title="The drone has to be aerodynamically forgiving">
+    Modern micro-FPV drones (Whoops, 5") are tuned by Betaflight's PID loops to be very tolerant of imperfect setpoints. The fork adds **optical-flow stabilization** so the drone holds position even when the host issues no command, failure modes degrade to "hover," not "crash."
+  </Step>
+  <Step title="The host has to expose useful primitives">
+    Raw `roll/pitch/yaw/throttle` is too low-level for productive agent design. The Nimbus Map exposes **vision targets** (`target_x`, `target_y`, `target_confidence`, history), **depth navigation**, **VIHO height estimation**, **optical flow**, **rangefinder**, **velocity / acceleration**, and a small library of helpers (`pid`, `lin`, `mem`, `once`, `acceleration`).
+  </Step>
+</Steps>
+
+## What "FSD" means in practice
+
+It does **not** mean "full Tesla-style autonomy." It means:
+
+- The user describes intent at a high level, a node graph, a few expressions, possibly a learned policy.
+- The system handles perception, planning, and control without manual stick input.
+- A safety pilot is always present and can interrupt by killing the agent (Pause button) or arming/disarming via aux switch.
+
+Tasks that have been demonstrated:
+
+| Task | Primitives used |
+| --- | --- |
+| Visual servoing (yaw + pitch toward a target) | YOLOv11 → `target_x` → `pid(...)` |
+| Search-and-land | YOLOv11 + altitude descent + `mem(...)` latch |
+| Obstacle-aware corridor flight | DepthAnything → `nav_*` variables → soft-min depth steering |
+| Hover-hold over a feature | Optical flow → `flow_x`/`flow_y` → counter-roll/pitch |
+| Trained policy rollout | LeRobot ACT/SmolVLA checkpoint as a node |
+
+## Where the boundary is
+
+A few things FSD-on-Nimbus deliberately *does not* try to do today:
+
+- **GPS waypoint missions across miles**, not the Nimbus product. The link, while fast, is short-range FPV.
+- **Beyond-visual-line-of-sight (BVLOS) operation**, regulatory and link-budget territory.
+- **Fully-onboard inference**, possible, but Nimbus's current advantage is using the host's GPU.
+
+These are not architectural impossibilities; they are scope choices that keep Nimbus focused on indoor and line-of-sight FPV autonomy, rather than a worse version of an industrial autopilot.

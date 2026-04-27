@@ -1,0 +1,98 @@
+---
+title: "The Nimbus Link"
+description: "What's actually on the wire between the Nimbus TX and the drone, packet rates, telemetry frames, binding, and channel selection."
+icon: "tower-broadcast"
+---
+
+The Nimbus link is a customized **ExpressLRS** 2.4 GHz LoRa link. ELRS is already one of the lowest-latency, highest-rate RC links in the world; the DroneForge fork adapts it to the Nimbus product's needs.
+
+## Packet rate
+
+ELRS upstream offers 50/150/250/500/1000 Hz at 2.4 GHz. The DroneForge fork adds a **custom rate**, "nimbus/df", that runs at 500 Hz with telemetry tuned for Nimbus's needs (link-state frame, MCU-UID, OPTRANGE, df_version).
+
+The relevant commits are:
+
+```text
+Increase telemetry rate (#2)
+  * 500hz
+  * DEFAULT BINDING PHRASE
+  * add custom rate for nimbus/df
+  * change default config
+  * change binding phrase
+```
+
+500 Hz is a deliberate balance: high enough for closed-loop visual servoing on the host, low enough that telemetry has bandwidth to carry useful state back.
+
+## Custom telemetry frames
+
+The Nimbus link carries more than just channels and link quality. The fork adds four frames specifically for Nimbus.
+
+### Link-state frame
+
+Per-packet representation of the radio link's health. Lets the host distinguish "lost the drone" from "the drone hung."
+
+Source: commit `add telemetry frame representing state of radio link (#4)`.
+
+### MCU-UID frame
+
+The drone-side RX exposes the ESP8285 MCU's unique ID up to the host. Used to recognize a particular drone across reboots and bind cycles.
+
+Source: commits `working version of mcu uid`, `feat/mcu-uid-frame`.
+
+### df-version frame
+
+DroneForge-specific hardware/firmware version pair. Used to detect mismatched flashes (e.g., new TX firmware vs. old RX firmware). See [Versioning](/firmware/versioning) for how the host consumes it.
+
+Source: commit `add custom versioning for hardware and firmware (#5)`.
+
+### OPTRANGE frame
+
+Optical-range / optical-flow telemetry from the FC's Micolink driver. Surfaces `optrange_distance`, `optrange_velX/velY`, `optrange_vz_measured`, and a validity flag to the host.
+
+See: [Betaflight fork, optical flow](/firmware/betaflight).
+
+## VRX channel selection (BBS)
+
+The Nimbus TX includes a 5.8 GHz video receiver that the host app drives over **SPI/BBS** (a backplane bus). The fork wires up the SPI pins on the ESP32-S3 and exposes 48 selectable channels:
+
+```json
+"use_vtx_channels": true,
+"vtx_rssi": 14,
+"vtx_bbs_data": 41,
+"vtx_bbs_cs": 40,
+"vtx_bbs_sck": 39
+```
+
+This is what the **Scan** button in the desktop app drives, cycle through bands, lock the channel that yields a clean video frame. Commit: `Add VRX channel selection to ELRS (#1)`.
+
+## Binding
+
+Binding pairs a TX with a specific RX. The fork makes two changes worth knowing:
+
+1. **Default binding phrase**, set by DroneForge so consumer Nimbus units bind out of the box without per-unit configuration.
+2. **TX bind-UID command**, `add command for setting tx bind uid`. Lets the host force a specific bind UID, useful for fleet operations.
+
+The user-facing flow stays the standard ELRS one: power-cycle the RX three times to enter bind mode (three quick LED flashes), then click **Bind** in the app once flashes turn into single steady ones.
+
+## Power and channel layout
+
+The Nimbus TX hardware target ships at a single fixed power level:
+
+```json
+"power_min": 0,
+"power_high": 0,
+"power_max": 0,
+"power_default": 0,
+"power_control": 0,
+"power_values": [13]
+```
+
+`13` is the SX1280 driver's value; commits show "increase tx power" was applied to give the link healthier margin in indoor multi-drone environments.
+
+## Why a custom link instead of stock ELRS?
+
+Three reasons:
+
+1. **Telemetry density.** Nimbus needs the OPTRANGE frame and `df_version` on every packet, not on a slow heartbeat.
+2. **Controlled hardware.** Stock ELRS supports thousands of TX/RX combinations. Nimbus is a fixed product. Pinning the firmware to a known TX (`DIY S3 Nimbus`) and a known RX build (`Unified_ESP8285_2400_RX_via_BetaflightPassthrough`) eliminates a class of "works on my hardware" support load.
+3. **Deterministic rates.** The 500 Hz "nimbus/df" rate is tuned end-to-end with the host runtime so the FSD pipeline has a predictable budget per frame.

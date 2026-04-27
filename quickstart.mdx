@@ -1,0 +1,134 @@
+---
+title: "Quickstart"
+description: "Flash a Nimbus TX, an ELRS RX on your drone, and a Betaflight FC, then fly your first agent. About 30 minutes if your drone is supported out of the box."
+icon: "rocket"
+---
+
+This walkthrough takes you from "boxes on a table" to a Nimbus connected to a drone, running an agent, in under an hour. It assumes you have:
+
+- A **Nimbus TX** (ESP32-S3 + LoRa1280-TCXO 2.4 GHz hardware). DIY-built or shipped.
+- A supported **2.4 GHz ELRS receiver** on the drone side (the DroneForge `nimbus/main` ELRS fork builds the drone bin from `Unified_ESP8285_2400_RX_via_BetaflightPassthrough`).
+- A supported **Betaflight flight controller**, currently BetaFPV (`STM32G47X_BETAFPVG473`), Axis Flying F7 AIO (`STM32F7X2_AXISFLYINGF7AIO`), or Lionbee V2 Rev B (`LIONBEE_V2_REVB`).
+- USB-C cable, your computer, and the drone's battery for the actual flight.
+
+<Steps>
+  <Step title="Get the flasher">
+    Grab `flash-helper` (the `firmware-flasher` repo's CLI), either as a release binary or build it yourself in five minutes:
+
+    <Tabs>
+      <Tab title="macOS / Linux">
+        ```bash
+        git clone https://github.com/Droneforge-Inc/firmware-flasher
+        cd firmware-flasher/flasher
+        python3 build.py --mode native
+        ./dist/flash-helper --help
+        ```
+      </Tab>
+      <Tab title="Windows (PowerShell)">
+        ```powershell
+        git clone https://github.com/Droneforge-Inc/firmware-flasher
+        cd firmware-flasher\flasher
+        py -3 .\build.py --mode native
+        .\dist\flash-helper.exe --help
+        ```
+      </Tab>
+    </Tabs>
+
+    The output is a single self-contained binary at `dist/flash-helper` (`flash-helper.exe` on Windows). It bundles `esptool` and, when present, a `dfu-util` payload. See [Install the flasher](/flasher/install) for the full build matrix.
+  </Step>
+
+  <Step title="Flash the Nimbus TX">
+    Plug the Nimbus TX into USB-C. Find its serial port (`/dev/cu.usbmodem*` on macOS, `/dev/ttyUSB*` on Linux, `COM*` on Windows). Then point `flash-helper` at the TX build directory:
+
+    ```bash
+    dist/flash-helper \
+      --target tx \
+      --port /dev/cu.usbmodem11401 \
+      --bin-root /path/to/elrs/nimbus/v1
+    ```
+
+    `--bin-root` should contain `bootloader.bin`, `partitions.bin`, `boot_app0.bin`, and `firmware.bin`. The flasher writes them at the standard ESP32-S3 offsets (`0x0`, `0x8000`, `0xe000`, `0x10000`). See [Flashing the Nimbus TX](/flasher/flashing-tx).
+
+    <Tip>
+      If you don't have prebuilt binaries, run `bash update.sh` from the root of the `firmware-flasher` repo with sibling clones of `ExpressLRS` and `betaflight`, it copies the build outputs from PIO into the right places. See [Syncing binaries](/flasher/syncing-binaries).
+    </Tip>
+  </Step>
+
+  <Step title="Flash the drone-side ELRS RX">
+    The drone's RX firmware lives at one address (`0x0000`) on an ESP8266/ESP8285. The cleanest way to reach it on a finished drone is through the FC's **Betaflight passthrough**:
+
+    ```bash
+    dist/flash-helper \
+      --target rx \
+      --port /dev/cu.usbmodem11401 \
+      --bin-root /path/to/elrs/drone \
+      --passthrough
+    ```
+
+    `--passthrough` tells `flash-helper` to open the FC's CLI, validate `serialrx_provider`, `serialrx_inverted`, `serialrx_halfduplex`, find the RX UART, then issue `serialpassthrough <uart> <baud>` and a CRSF bootloader-reset sequence. See [Flashing the RX](/flasher/flashing-rx).
+  </Step>
+
+  <Step title="Flash the Betaflight FC">
+    DroneForge ships custom Betaflight builds with optical-flow support (Micolink protocol). Pick the variant that matches your FC and flash it via DFU:
+
+    ```bash
+    dist/flash-helper \
+      --target fc \
+      --port /dev/cu.usbmodem11401 \
+      --firmware /path/to/betaflight/bin/betafpv.bin \
+      --config /path/to/betaflight/config/whoop-of.txt
+    ```
+
+    `--firmware` is the converted `.bin` (the `update.sh` helper turns Betaflight's `.hex` outputs into `.bin` for you), `--config` is the matching `cli-loadable` config preset (`whoop-of.txt`, `axis-of.txt`, `lionbee.txt`). See [Flashing the FC](/flasher/flashing-fc).
+  </Step>
+
+  <Step title="Bind & scan from the desktop app">
+    Open the DroneForge desktop app, log in, and head to the **Deploy** tab.
+
+    1. **Bind**, power-cycle your drone three times to put the RX into bind mode (you'll see three quick LED flashes, then single flashes when Nimbus locks). Click **Bind** in the app.
+    2. **Scan**, the app cycles 5.8 GHz VRX bands until your drone's video appears. Once you see the feed in the app, you're connected.
+    3. Confirm the four channel sticks track in the right pane and the **Nimbus connection indicator** in the top right is green.
+
+    See [VRX Controls](/app/vrx-controls).
+  </Step>
+
+  <Step title="Compose your first agent">
+    <Warning>
+      The expression you author below sets `aux1 = 1800`, which arms the drone the moment the agent is deployed. Read [Safety](/safety) before going further. First flights should be over a soft, open area, with a hardware kill-switch in reach, and never above people or anything you can't afford to break.
+    </Warning>
+
+    Switch to the **Build** tab. Hit **+** to make a new agent. Add a control node and write:
+
+    ```text
+    roll = 992; pitch = 992; yaw = 992; throttle = 200; aux1 = 1800
+    ```
+
+    That's a level, idle-throttle, armed baseline (aux1 high). Hit **Save**. Now drop in a Vision-Mode YOLOv11 node and add a control expression that yaws toward `target_x`:
+
+    ```text
+    yaw = pid(320, target_x, 0.8, 0.0, 0.1, 300)
+    pitch = if(target_visible, 1100, 992)
+    throttle = 200
+    ```
+
+    See [Expression syntax](/agents/expression-syntax) for the full reference.
+  </Step>
+
+  <Step title="Deploy">
+    Back in the **Deploy** tab, confirm the right agent is loaded (top-left), keep your kill-switch in reach, and press **Play**. **Pause** stops the agent and the drone reverts to the FC's failsafe.
+  </Step>
+</Steps>
+
+## Next steps
+
+<CardGroup cols={3}>
+  <Card title="Architecture deep-dive" icon="diagram-project" href="/concepts/architecture">
+    How the TX, RX, FC, and host actually talk to each other.
+  </Card>
+  <Card title="Expression cookbook" icon="utensils" href="/agents/examples">
+    Copy-pasteable agents, orbit, follow, search-and-land, hover-hold.
+  </Card>
+  <Card title="Train your own policy" icon="brain" href="/autonomy/training">
+    Record flights, build a LeRobotDataset, train an ACT or SmolVLA model.
+  </Card>
+</CardGroup>
