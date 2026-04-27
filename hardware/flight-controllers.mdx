@@ -1,0 +1,91 @@
+---
+title: "Supported Flight Controllers"
+description: "The three Betaflight FC variants DroneForge currently ships custom firmware for, with matching CLI configs."
+icon: "cpu"
+---
+
+The DroneForge Betaflight fork supports three flight controllers out of the box. Each has a build target and a paired CLI configuration that the flasher writes after the binary lands.
+
+<CardGroup cols={3}>
+  <Card title="BetaFPV (Whoop)" icon="square-1">
+    STM32 G47X · `STM32G47X_BETAFPVG473`
+    <br />
+    Config: `whoop-of.txt`
+  </Card>
+  <Card title="Axis Flying F7 AIO" icon="square-2">
+    STM32 F7X2 · `STM32F7X2_AXISFLYINGF7AIO`
+    <br />
+    Config: `axis-of.txt`
+  </Card>
+  <Card title="Lionbee V2 Rev B" icon="square-3">
+    Vendor-specific · `LIONBEE_V2_REVB`
+    <br />
+    Config: `lionbee.txt`
+  </Card>
+</CardGroup>
+
+## What each variant gets
+
+All three variants share the DroneForge BF additions:
+
+- **Optical-flow driver** with Micolink protocol (commit: `optical flow driver for betaflight (#4)`)
+- **Always-Micolink** behavior at task init (`Always set MTF sensor to use Micolink protocol (#5)`)
+- **OPTRANGE telemetry frame** to the link
+- **Vario + disarmed-vspd** telemetry
+- **`df_version`** integrated into the version frame
+- **EKF state for raw IMU** in select FC variants
+
+`update.sh` in `firmware-flasher` shows the matrix explicitly:
+
+```bash
+$(basename "$0") betaflight --fc betafpv
+$(basename "$0") betaflight --fc axis
+$(basename "$0") betaflight --fc lionbee
+```
+
+## Why these specific FCs
+
+DroneForge keeps the supported FC matrix small on purpose:
+
+- **BetaFPV (G47X)**, the canonical micro-Whoop FC. Tiny airframes, predictable PIDs, the primary target Nimbus is sold against.
+- **Axis Flying F7 AIO**, added later (commit: `add axis fc`, `axis tlm working better now`). Larger FPV builds with more headroom for sensors and OSD.
+- **Lionbee V2 Rev B**, alternative micro option; required a small carve-out in ELRS to skip auto telemetry-ratio adjustment.
+
+If you have a different FC, the firmware will not flash via `flash-helper`'s `--target fc` path. Talk to DroneForge, most STM32 G4/F7-series Betaflight targets are mechanically possible to support, but the Nimbus features (optical flow, OPTRANGE, df_version) need wiring per target.
+
+## Flashing flow
+
+The flasher's FC path is DFU-based:
+
+```bash
+flash-helper \
+  --target fc \
+  --port /dev/cu.usbmodem11401 \
+  --firmware /path/to/betaflight/bin/betafpv.bin \
+  --config   /path/to/betaflight/config/whoop-of.txt
+```
+
+What it does:
+
+1. Open the FC's serial CLI at 115200.
+2. Send the Betaflight CLI command to enter DFU bootloader (`bl`).
+3. Snapshot DFU device list **before** vs **after**, identify the new device.
+4. Drive `dfu-util` to address `0x08000000:leave` with the firmware.
+5. Re-open the CLI after the FC reboots.
+6. Stream the matching `--config` file into the CLI so the FC comes up with the right serial port assignments, optical-flow config, telemetry settings, etc.
+
+`dfu-util` can either be on `PATH`, passed via `--dfu-util /path/to/dfu-util`, or **bundled** into `flash-helper` itself by dropping platform binaries under `flasher/vendor/dfu-util/{platform-arch}/`. See [Bundled tools](/flasher/install#bundled-tools).
+
+## Optical flow setup
+
+Each `*-of.txt` config configures the optical-flow port pin assignment, baud, and EKF tuning specific to that FC. The fork's [BF optical-flow PR (#4)](https://github.com/Droneforge-Inc/betaflight-fork/pulls?q=optical+flow) has the full driver code; the configs activate it for each FC.
+
+After flashing, verify on the FC's CLI:
+
+```text
+get optical_flow_*
+get rangefinder_*
+status
+```
+
+Then, in the desktop app, you should see `flow_x`, `flow_y`, `optrange_distance`, etc. populated when you hover over a textured surface. See [Inputs and variables](/agents/inputs-and-variables) for the agent-side names.

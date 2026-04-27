@@ -1,0 +1,85 @@
+---
+title: "Drone-side ELRS RX"
+description: "The receiver on the drone. ESP8285, runs the matching DroneForge ELRS RX firmware, and speaks CRSF to the flight controller."
+icon: "satellite-dish"
+---
+
+The drone-side receiver is **not** a custom DroneForge board, it is whatever standard 2.4 GHz ESP8285 ELRS RX is mounted on your drone. The DroneForge fork builds a *custom firmware* for it.
+
+## Build target
+
+The relevant PlatformIO env in [`ExpressLRS-Fork`](https://github.com/Droneforge-Inc/ExpressLRS-Fork) is:
+
+```text
+Unified_ESP8285_2400_RX_via_BetaflightPassthrough
+```
+
+That target produces a single `firmware.bin` flashed to address `0x0000` on the ESP8285. There is no separate bootloader/partitions layout to manage. ESP8266-family chips boot directly from `0x0`.
+
+## What it has on top of upstream ELRS
+
+The fork adds the same Nimbus-specific telemetry and versioning the TX uses, plus a few RX-side fixes:
+
+- **MCU-UID frame**, when the RX boots, it sends its ESP8285 unique ID up to the TX. Commit: `working version of mcu uid`, `Merge pull request #7 from Droneforge-Inc/feat/mcu-uid-frame`. The host uses this to recognize a specific drone across power cycles.
+- **`df_version`**, pair of (hardware, firmware) versions exposed in telemetry so the host can flag mismatched flashes.
+- **Bind-UID command**, `add command for setting tx bind uid`. Pairs with the TX-side change.
+- **Reduced telemetry-rate switching for Lionbee**, `prevent tlm ratio from changing for lionbee` / `update elrs to not change tlm ratio for lionbee`. Specific avoidance of a known Lionbee FC quirk.
+- **Flashing fixes**, `fix rx flashing`, `[linux elrs fix] retry flashing at different baud rates, additional error handling`. Most of these benefit the `flash-helper` passthrough flow (see below).
+
+## How you flash it
+
+Two paths, depending on whether the drone is fully assembled:
+
+### Direct USB (bench / pre-build)
+
+If you have the RX on the bench with a USB-to-UART adapter:
+
+```bash
+flash-helper \
+  --target rx \
+  --port /dev/cu.usbmodem11401 \
+  --bin-root /path/to/elrs/drone
+```
+
+The default chip for `--target rx` is `esp8266`. Address is `0x0000`. The flasher uses the bundled `esptool` to drive the ESP8285's ROM bootloader.
+
+### Through Betaflight passthrough (typical)
+
+Once the drone is assembled, the only USB connection you have is the FC's. Use `--passthrough` to route the flash through the FC:
+
+```bash
+flash-helper \
+  --target rx \
+  --port /dev/cu.usbmodem11401 \
+  --bin-root /path/to/elrs/drone \
+  --passthrough
+```
+
+What this does, end-to-end, lives in `flasher/betaflight_passthrough.py`:
+
+1. Open the FC's serial CLI at 115200 baud.
+2. Validate `serialrx_provider` is `CRSF` or `ELRS`.
+3. Validate `serialrx_inverted` is `OFF`.
+4. Validate `serialrx_halfduplex` is `OFF` or `AUTO`.
+5. List the FC's serial UARTs and find the one with the SerialRX function bit (`0x40 == 64`) set.
+6. Issue `serialpassthrough <uart> <baud>` and close the connection.
+7. Re-open at the requested baud, blast the ELRS CRSF bootloader-reset sequence (`0x07 0x07 0x12 0x20` + 32×`0x55`, then the bootloader init bytes).
+8. Hand the now-bootloader-mode RX to `esptool` for the actual flash.
+
+If the validations fail, `flash-helper` raises `PassthroughFailed` with a list like:
+
+```
+serialrx_provider must be CRSF/ELRS; serialrx_halfduplex must be OFF/AUTO
+```
+
+Fix those settings in Betaflight Configurator, save, then retry. See [Flashing the RX](/flasher/flashing-rx) for the full troubleshooting tree.
+
+## Linux retry behavior
+
+On Linux, `simple_usb_upload.py` watches for `errno=22 (Invalid argument)` from the USB stack during passthrough, a known kernel-side artifact when the FC USB CDC reattaches after the RX reboots into bootloader. It retries at lower passthrough baud rates from the candidate set:
+
+```python
+RX_PASSTHROUGH_BAUD_CANDIDATES = (420000, 230400, 115200)
+```
+
+You almost never have to think about this, the flasher handles it. But if you see *"would have retried, but baud candidate exhausted"* in the output, the FC is in a weird state. Power-cycle the drone and try again.

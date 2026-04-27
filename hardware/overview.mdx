@@ -1,0 +1,58 @@
+---
+title: "Hardware Overview"
+description: "Every piece of silicon Nimbus touches. TX, RX, and FC, and what each one is responsible for."
+icon: "microchip"
+---
+
+A Nimbus deployment is three boards plus a host PC. The host runs the agent runtime; the three boards live on the *physical* RC link.
+
+| Board | Chip | Role | Configured by |
+| --- | --- | --- | --- |
+| **Nimbus TX** | ESP32-S3 + LoRa1280-TCXO | 2.4 GHz transmitter on the desk; talks USB to the host. | [`ExpressLRS-Fork` / DIY S3 Nimbus](/hardware/nimbus-tx) |
+| **Drone RX** | ESP8285 (ESP8266 family) | 2.4 GHz receiver on the drone; speaks CRSF to the FC. | [`ExpressLRS-Fork` (RX build)](/hardware/drone-rx) |
+| **Flight controller** | STM32 G47X / F7X2 / etc. | Inner control loops, motor mixing, optical-flow stabilization. | [`betaflight-fork`](/hardware/flight-controllers) |
+
+<Note>
+  **DroneForge does not manufacture every part.** Like Betaflight and ExpressLRS, the FC and the RX are off-the-shelf hardware from a curated vendor list. The Nimbus *TX* is the DroneForge-specific board.
+</Note>
+
+## How they wire together
+
+```
+Host  ───  USB-C  ───▶  Nimbus TX  ──── 2.4 GHz LoRa ────▶  Drone RX  ──── UART (CRSF) ────▶  Betaflight FC  ────▶  ESCs / motors
+                                                                                                      ▲
+                                                                                                      │
+                                                                                  optical flow / range sensor (Micolink)
+```
+
+## Currently supported FCs
+
+The flasher's `update.sh` enumerates the FCs DroneForge ships custom Betaflight builds for:
+
+| FC | Chip | Betaflight target | Source `.hex` (under `betaflight/obj/`) |
+| --- | --- | --- | --- |
+| **BetaFPV** | STM32 G47X | `STM32G47X_BETAFPVG473` | `betaflight_4.5.2_STM32G47X_BETAFPVG473.hex` |
+| **Axis Flying F7 AIO** | STM32 F7X2 | `STM32F7X2_AXISFLYINGF7AIO` | `betaflight_4.5.2_STM32F7X2_AXISFLYINGF7AIO.hex` |
+| **Lionbee V2 Rev B** | (vendor-specific) | `LIONBEE_V2_REVB` | `betaflight_4.5.2_LIONBEE_V2_REVB.hex` |
+
+Each ships with a matching CLI config preset:
+
+| FC | Config preset |
+| --- | --- |
+| BetaFPV (Whoop OF) | `whoop-of.txt` |
+| Axis Flying F7 AIO | `axis-of.txt` |
+| Lionbee V2 Rev B | `lionbee.txt` |
+
+These map directly onto `flash-helper --target fc --firmware ... --config ...` invocations. See [Flashing the FC](/flasher/flashing-fc).
+
+## Compatibility checks
+
+When a Nimbus TX talks to a drone RX, the [`df_version` frame](/concepts/nimbus-link#df-version-frame) carries the (hardware version, firmware version) pair from the drone back to the host. The desktop app uses it to surface a clear "your TX firmware is newer than the drone's" warning instead of failing silently.
+
+The matching BF fork build also encodes a `df_version`, so the host can verify that your drone is running the FC build it expects:
+
+```text
+Feat/df version (#6): bumped df_version on the FC, threaded through telemetry.
+```
+
+If you see a mismatch in the desktop app, run `flash-helper` against the offending board to bring it back in line.

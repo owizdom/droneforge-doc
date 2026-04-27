@@ -1,0 +1,118 @@
+---
+title: "Nimbus TX"
+description: "The DroneForge transmitter. ESP32-S3 + LoRa1280-TCXO 2.4 GHz, with a 5.8 GHz VRX on a backplane bus."
+icon: "tower-broadcast"
+---
+
+The Nimbus TX is the only piece of hardware DroneForge designs from scratch. It is documented in the [`ExpressLRS-Fork`](https://github.com/Droneforge-Inc/ExpressLRS-Fork) repo as the **DIY S3 Nimbus** target.
+
+## What it is
+
+| | |
+| --- | --- |
+| **MCU** | Espressif ESP32-S3 |
+| **Radio** | Semtech SX1280 with TCXO (the LoRa1280-TCXO module) |
+| **Band** | 2.4 GHz |
+| **Custom rate** | 500 Hz ("nimbus/df") |
+| **Host link** | USB-C (CDC serial to the desktop app) |
+| **Video RX** | 5.8 GHz, 48-channel, driven over SPI/BBS |
+| **Build environment (PIO)** | `Unified_ESP32S3_2400_TX_via_UART` |
+| **Hardware option in the configurator** | `DIY ESP32-S3 Nimbus 2.4Ghz TX` |
+
+The full hardware definition lives at `src/hardware/TX/DIY S3 Nimbus.json` in the ELRS fork.
+
+## Pin map
+
+```json src/hardware/TX/DIY S3 Nimbus.json
+{
+  "serial_rx": 44,
+  "serial_tx": 43,
+
+  "radio_miso": 9,
+  "radio_mosi": 11,
+  "radio_sck": 12,
+
+  "radio_busy": 6,
+  "radio_dio1": 7,
+  "radio_rst": 4,
+  "radio_nss": 10,
+  "radio_tcxo_en": 5,
+
+  "power_min": 0,
+  "power_high": 0,
+  "power_max": 0,
+  "power_default": 0,
+  "power_control": 0,
+  "power_values": [13],
+
+  "led": 2,
+  "led_rgb_isgrb": false,
+
+  "use_backpack": false,
+  "debug_backpack_baud": 460800,
+  "debug_backpack_rx": 44,
+  "debug_backpack_tx": 43,
+  "passthrough_baud": 115200,
+
+  "use_vtx_channels": true,
+  "vtx_rssi": 14,
+  "vtx_bbs_data": 41,
+  "vtx_bbs_cs": 40,
+  "vtx_bbs_sck": 39
+}
+```
+
+A few things to call out:
+
+- **TCXO enable** is a *gated* GPIO (`radio_tcxo_en = 5`). The radio's TCXO oscillator only powers up when the firmware asserts this. If you build a clone Nimbus and forget this rail, the link will refuse to lock.
+- **One status LED** on GPIO 2, monochrome (`led_rgb_isgrb = false`). The Nimbus enclosure exposes this through a light pipe.
+- **Backpack pins overlap serial.** The same UART pins (44/43) are reused for the optional debug backpack. `use_backpack = false` keeps the serial interface free for the host app.
+- **VRX is BBS, not I²C.** The 5.8 GHz video receiver speaks across an SPI-backed backplane bus on pins 39/40/41, with RSSI on GPIO 14.
+- **Single power level.** The TX is fixed at `power_values = [13]`. There is no power slider. Nimbus is tuned for indoor/short-range FPV.
+
+## Flashing the Nimbus TX
+
+Two options, depending on whether you have a build set up:
+
+<Tabs>
+  <Tab title="Use prebuilt binaries (`flash-helper`)">
+    ```bash
+    flash-helper \
+      --target tx \
+      --port /dev/cu.usbmodem11401 \
+      --bin-root /path/to/elrs/nimbus/v1
+    ```
+
+    The flasher uses the standard ESP32-S3 partition layout:
+
+    | File | Address |
+    | --- | --- |
+    | `bootloader.bin` | `0x0000` |
+    | `partitions.bin` | `0x8000` |
+    | `boot_app0.bin`  | `0xe000` |
+    | `firmware.bin`   | `0x10000` |
+
+    See [CLI reference](/flasher/cli-reference) for the full flag list.
+  </Tab>
+  <Tab title="Build from source (PlatformIO)">
+    From a clone of `ExpressLRS-Fork`:
+
+    ```bash
+    python3 -m pip install --user platformio
+    cd src
+    pio run -e Unified_ESP32S3_2400_TX_via_UART --target upload
+    ```
+
+    When PIO prompts for a hardware configuration, pick **`DIY ESP32-S3 Nimbus 2.4Ghz TX`**. PIO writes all four ESP32-S3 partitions at the right offsets for you.
+  </Tab>
+</Tabs>
+
+<Warning>
+  Before flashing a new TX, plug it in **without** the antenna attached if possible. The TX defaults to its single power level immediately on boot, and an unmatched antenna (or no antenna) is the worst-case load for the SX1280 PA.
+</Warning>
+
+## What the Nimbus TX does *not* do
+
+- It does not run an agent. The agent lives on the host.
+- It does not decode video. Video goes from the drone's analog VTX to the TX's BBS-driven receiver to the host as a digitized stream, the TX is a thin pipe.
+- It does not store flight logs. Logs live on the host (the desktop app's **Flight** tab).
