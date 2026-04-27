@@ -1,0 +1,147 @@
+---
+title: "Flashing the Drone RX"
+description: "Two flashing flows: direct USB on the bench, and Betaflight passthrough on a fully assembled drone."
+icon: "satellite-dish"
+---
+
+The drone-side ELRS RX is an ESP8285 with a single firmware image at address `0x0000`. There is no bootloader/partition layout to manage.
+
+## When to use which flow
+
+| Situation | Flow |
+| --- | --- |
+| Bare RX board on the bench, USB-to-UART adapter wired up | Direct USB |
+| RX is mounted on a finished drone, only the FC's USB is accessible | Betaflight passthrough |
+
+## Direct USB (bench)
+
+```bash
+flash-helper \
+  --target rx \
+  --port /dev/cu.usbmodem11401 \
+  --bin-root /path/to/elrs/drone
+```
+
+The flasher:
+
+1. Picks `esp8266` as the chip (`flash-helper` default for `--target rx`).
+2. Looks for `firmware.bin` at `<bin-root>/rx/firmware.bin` then `<bin-root>/firmware.bin`.
+3. Calls `esptool` with `(0x0000, firmware.bin)`.
+
+That's it.
+
+## Betaflight passthrough (typical)
+
+Use `--passthrough` when the only USB you can reach is the FC's. The flasher routes through Betaflight's CLI to put the RX into bootloader mode, then flashes through the same UART.
+
+```bash
+flash-helper \
+  --target rx \
+  --port /dev/cu.usbmodem11401 \
+  --bin-root /path/to/elrs/drone \
+  --passthrough
+```
+
+### What passthrough actually does
+
+`flasher/betaflight_passthrough.py` runs through this sequence:
+
+<Steps>
+  <Step title="Open the FC's CLI at 115200">
+    Sends `#` and waits for the `# ` prompt.
+
+    If the board is already in passthrough (`CCC` shows up in the response), the helper raises `PassthroughEnabled` and proceeds straight to bootloader-reset.
+  </Step>
+  <Step title="Validate three serialrx settings">
+    ```text
+    serialrx_provider = CRSF | ELRS
+    serialrx_inverted = OFF
+    serialrx_halfduplex = OFF | AUTO
+    ```
+
+    If any are wrong, the helper raises `PassthroughFailed` with a list of the offenders. Fix them in Betaflight Configurator (Receiver tab), save, retry.
+  </Step>
+  <Step title="Find the SerialRX UART">
+    Issues `serial`, parses the table, finds the row with the SerialRX function bit set (`bit 0x40 == 64`):
+
+    ```python
+    if match and (int(match.group(2)) & 64) == 64:
+        serial_rx_index = match.group(1)
+    ```
+
+    If no such row is found, raises `PassthroughFailed("Could not find Betaflight Serial RX UART")`.
+  </Step>
+  <Step title="Issue serialpassthrough">
+    ```text
+    serialpassthrough <UARTn> <baud>
+    ```
+
+    The helper sleeps 200 ms, closes the connection.
+  </Step>
+  <Step title="Reset RX into bootloader">
+    Re-opens the port at the requested baud and sends:
+
+    ```python
+    helper.write(b"\x07\x07\x12\x20" + (32 * b"\x55"))   # ELRS sync prefix
+    time.sleep(0.2)
+    helper.write(bootloader_seq)                          # CRSF bootloader init
+    serial_port.flush()
+    time.sleep(0.5)
+    ```
+
+    The CRSF bootloader sequence is built from the protocol's INIT_SEQ ([`bootloader.py`](https://github.com/Droneforge-Inc/firmware-flasher/blob/main/flasher/bootloader.py)) plus a CRC-8 with polynomial `0xD5`.
+  </Step>
+  <Step title="Hand off to esptool">
+    The RX is now in ROM-bootloader mode. `flash-helper` calls `esptool` with `(0x0000, firmware.bin)`.
+  </Step>
+</Steps>
+
+### Linux baud-retry behavior
+
+Linux's USB-CDC stack occasionally returns `errno=22 (Invalid argument)` when the FC's CDC interface reattaches after the RX reboots. `flash-helper` detects this and retries at lower baud rates from a candidate set:
+
+```python
+RX_PASSTHROUGH_BAUD_CANDIDATES = (420000, 230400, 115200)
+```
+
+You should not have to think about this. If you see *"would have retried, but baud candidate exhausted"* in the output, power-cycle the drone and try again.
+
+There is also a guard for older `esptool` ROM stub mismatches (`UnsupportedCommandError: Invalid (unsupported) command 0x8`) that triggers the same retry path.
+
+## Verifying the flash
+
+Connect to the FC's CLI after flashing. In Betaflight CLI:
+
+```text
+status
+```
+
+You should see RX bytes incrementing on the SerialRX UART when the Nimbus TX is powered. In the desktop app, the four-channel status indicator (right pane on the Deploy tab) should track stick inputs.
+
+## Common failure modes
+
+<AccordionGroup>
+  <Accordion title="`PassthroughFailed: serialrx_provider must be CRSF/ELRS`">
+    Open Betaflight Configurator → Receiver → Serial Receiver Provider. Set to `CRSF` (or `ELRS` on builds that expose it). Save & reboot.
+  </Accordion>
+
+  <Accordion title="`Could not find Betaflight Serial RX UART`">
+    No UART has the SerialRX function assigned. In Betaflight Configurator → Ports, enable Serial RX on the UART your RX is wired to. Save & reboot.
+  </Accordion>
+
+  <Accordion title="`No Betaflight CLI prompt detected`">
+    The FC isn't reachable. Confirm:
+
+    1. The drone is powered (USB power alone is enough, battery not required).
+    2. The port matches (look for the FC's USB CDC device, not the Nimbus TX's).
+    3. No other Betaflight Configurator session is open holding the port.
+  </Accordion>
+
+  <Accordion title="The flash starts but hangs at `Connecting...`">
+    The RX never made it into bootloader mode. Common causes:
+
+    - Wrong UART found (rare; happens if your serialrx config is *partially* correct).
+    - The RX is wired half-duplex but `serialrx_halfduplex` reads as `OFF`. Set to `AUTO`.
+    - The RX is a non-ESP8285 board (e.g., a stm32 RX). The DroneForge fork's `--target rx` defaults assume ESP8266-family.
+  </Accordion>
+</AccordionGroup>

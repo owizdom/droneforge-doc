@@ -1,0 +1,133 @@
+---
+title: "Flashing the Flight Controller"
+description: "DFU-based flashing for Betaflight FCs, including the CLI config replay step that follows."
+icon: "cpu"
+---
+
+`flash-helper --target fc` flashes a Betaflight FC over **DFU** (USB Device Firmware Upgrade), then re-opens the CLI to apply a configuration file.
+
+## The command
+
+```bash
+flash-helper \
+  --target fc \
+  --port /dev/cu.usbmodem11401 \
+  --firmware /path/to/betaflight/bin/betafpv.bin \
+  --config   /path/to/betaflight/config/whoop-of.txt
+```
+
+| Flag | Required? | Notes |
+| --- | --- | --- |
+| `--target fc` | yes | Selects the FC code path. |
+| `--port` | yes | The FC's USB-CDC port *before* it enters DFU. |
+| `--firmware` | yes | A `.bin` produced from `arm-none-eabi-objcopy -I ihex -O binary` of Betaflight's `.hex` output. |
+| `--config` | yes | The matching CLI config file. The flasher streams it into the CLI after flashing. |
+| `--dfu-util` | no | Override the bundled / `PATH`-resolved `dfu-util` binary. |
+
+## What the flasher does, step by step
+
+<Steps>
+  <Step title="Snapshot DFU devices (before)">
+    Calls `dfu-util -l`, parses the lines that look like:
+
+    ```text
+    Found DFU: [0483:df11] devnum=N, path="X-Y", serial="..."
+    ```
+
+    into a list of `(usb_id, path, serial)` tuples. This is the "before" set.
+  </Step>
+  <Step title="Open the FC CLI and request bootloader">
+    Opens the FC port, enters CLI (`#`), and issues `bl` to put the FC into bootloader (DFU) mode. Closes the serial connection.
+
+    Defaults:
+    - `FC_CLI_BAUD = 115200`
+    - `FC_BOOTLOADER_DELAY = 1.0` (seconds to settle after `bl`)
+  </Step>
+  <Step title="Snapshot DFU devices (after)">
+    Re-runs `dfu-util -l` and diffs against the before-set. The new device is the FC in bootloader mode.
+
+    If exactly one new device appears, that's the target. If none appear but exactly one DFU device is now visible, that's used as a fallback. If multiple new devices appear, an error is raised so the user can resolve manually.
+  </Step>
+  <Step title="Run dfu-util">
+    Builds the command:
+
+    ```bash
+    dfu-util -d <usb_id> -S <serial> \
+             -a 0 \
+             -s 0x08000000:leave \
+             -D <firmware.bin>
+    ```
+
+    The address `0x08000000` is STM32 system flash; `:leave` requests a reboot into the new firmware after the download.
+
+    `dfu-util`'s output is streamed live through `flash-helper`'s `stream_subprocess_output()`. The flasher tolerates a known-benign stderr pattern (*"Submitting leave request"* + *"dfu-util lost the device during leave"*), that's the FC rebooting and dropping the USB endpoint, not an error.
+  </Step>
+  <Step title="Wait, then re-open the CLI">
+    Sleeps `FC_REBOOT_DELAY = 5.0` seconds so the FC reboots cleanly, then re-opens the CLI port.
+  </Step>
+  <Step title="Stream the config">
+    Reads `--config` line by line, sending each through the CLI. Waits for the `# ` prompt between commands. Issues a final `save` so the FC commits to flash.
+  </Step>
+</Steps>
+
+## Choosing the right firmware + config
+
+The DroneForge fork ships three FC variants. Pair them with their matching configs:
+
+| FC | `--firmware` | `--config` |
+| --- | --- | --- |
+| BetaFPV (Whoop) | `binaries/betaflight/bin/betafpv.bin` | `binaries/betaflight/config/whoop-of.txt` |
+| Axis Flying F7 AIO | `binaries/betaflight/bin/axis.bin` | `binaries/betaflight/config/axis-of.txt` |
+| Lionbee V2 Rev B | `binaries/betaflight/bin/lionbee.bin` | `binaries/betaflight/config/lionbee.txt` |
+
+`update.sh` keeps both columns in sync.
+
+## Bundled `dfu-util`
+
+For self-contained flashing, drop platform binaries into `flasher/vendor/dfu-util/<platform-arch>/` before building (see [Install the flasher → Bundled tools](/flasher/install#bundled-tools)). At runtime, `flash-helper`:
+
+1. Honors `--dfu-util <path>` if you pass it.
+2. Looks under the bundle directory for the matching platform-arch.
+3. Falls back to `dfu-util` on `PATH`.
+
+Library paths are patched per platform:
+
+```python
+# from bundled_tools.py
+if platform_name == "darwin":
+    DYLD_LIBRARY_PATH ← tool_dir
+elif os_name == "nt":
+    PATH ← tool_dir
+else:
+    LD_LIBRARY_PATH ← tool_dir
+```
+
+## Robustness notes
+
+The DFU path is the part of `flash-helper` that has accumulated the most reliability fixes:
+
+- **DFU device disambiguation**, the before/after diff (commit `Added DFU device robustness`) prevents the flasher from grabbing a *different* DFU device that happened to be plugged in.
+- **Sleep before RX bootloader reset**, `Added small sleep before resetting rx to bootloader` is a related guard for the RX flow.
+- **DFU device-ID check before flashing**, `check for dfu device id before tying to flash` rejects flash attempts on USB IDs that aren't STM32 DFU.
+
+These all fail safe, when in doubt, the flasher errors out with a clear message rather than corrupting an unrelated device.
+
+## Common failure modes
+
+<AccordionGroup>
+  <Accordion title="`Required tool not found: dfu-util`">
+    The flasher couldn't resolve `dfu-util` from `--dfu-util`, the bundle, or `PATH`. Either pass `--dfu-util /path/to/dfu-util`, install it system-wide (`brew install dfu-util` / `apt install dfu-util`), or add a bundled binary under `flasher/vendor/dfu-util/<platform-arch>/`.
+  </Accordion>
+
+  <Accordion title="`Multiple new DFU devices appeared after bootloader entry`">
+    Another DFU-mode device (an STM32 dev board, an unflashed VTX, etc.) was plugged in at the moment of flashing. Unplug everything except the target FC and retry.
+  </Accordion>
+
+  <Accordion title="`File downloaded successfully` but the FC doesn't reboot">
+    The well-known dfu-util "lost the device during leave" warning. The flasher already handles this, if you see the same message but flashing did *not* succeed, escalate by passing `--dfu-util` to a known-good binary (e.g., `dfu-util 0.11`).
+  </Accordion>
+
+  <Accordion title="The FC reboots into the new firmware but is unconfigured">
+    The CLI-config replay step failed (often because the FC's CLI hadn't enumerated yet). The fix is just to re-run `flash-helper --target fc` with the *same* arguments, the firmware is already in place; the second run will only need to re-stream the config.
+  </Accordion>
+</AccordionGroup>

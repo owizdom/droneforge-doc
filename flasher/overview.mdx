@@ -1,0 +1,96 @@
+---
+title: "Flasher Overview"
+description: "What firmware-flasher is, what it ships, and how it fits between your PC and three different microcontrollers."
+icon: "bolt"
+---
+
+[`Droneforge-Inc/firmware-flasher`](https://github.com/Droneforge-Inc/firmware-flasher) is the user-facing tool that puts Nimbus firmware onto Nimbus hardware. It does three things:
+
+1. **Stores managed firmware binaries** under `binaries/` so a known-good set is always one `git clone` away.
+2. **Builds and ships `flash-helper`**, a single-binary CLI (PyInstaller) that flashes:
+   - the Nimbus TX (ESP32-S3),
+   - the drone-side ELRS RX (ESP8285), and
+   - the drone's Betaflight FC (STM32 over DFU).
+3. **Syncs build artifacts** from sibling clones of [`ExpressLRS-Fork`](https://github.com/Droneforge-Inc/ExpressLRS-Fork) and [`betaflight-fork`](https://github.com/Droneforge-Inc/betaflight-fork) into the right places under `binaries/`, via `update.sh`.
+
+## Repo layout
+
+```
+firmware-flasher/
+├── binaries/
+│   ├── betaflight/
+│   │   ├── bin/{betafpv,axis,lionbee}.bin       ← FC firmware
+│   │   └── config/{whoop-of,axis-of,lionbee}.txt ← matching CLI configs
+│   └── elrs/
+│       ├── nimbus/v1/{bootloader,partitions,boot_app0,firmware}.bin
+│       └── drone/firmware.bin
+├── flasher/
+│   ├── simple_usb_upload.py     ← CLI entrypoint (~20 KB, the brain)
+│   ├── betaflight_passthrough.py← FC CLI ↔ RX bootloader plumbing
+│   ├── bootloader.py            ← CRSF bootloader-reset bytes
+│   ├── serial_helper.py         ← thin pyserial wrapper
+│   ├── bundled_tools.py         ← dfu-util locator, env shimming
+│   ├── build.py / .sh / .ps1    ← cross-platform build entrypoints
+│   ├── flash-helper.spec        ← PyInstaller onefile spec
+│   ├── esptool/                 ← vendored esptool
+│   └── vendor/dfu-util/         ← (optional) bundled dfu-util binaries
+└── update.sh                    ← sync helper (sibling-repo layout)
+```
+
+## What `flash-helper` is
+
+A single self-contained executable that runs on macOS, Linux, and Windows. It bundles `esptool` (for ESP flashing) and, when present, `dfu-util` (for STM32 FC flashing). End users do *not* need a Python toolchain.
+
+### Three target modes
+
+```bash
+flash-helper --target tx --port <port> --bin-root <dir>     # Nimbus TX
+flash-helper --target rx --port <port> --bin-root <dir>     # drone RX
+flash-helper --target fc --port <port> --firmware <bin> --config <txt>  # Betaflight FC
+```
+
+Each is documented under its own page:
+
+<CardGroup cols={3}>
+  <Card title="Flashing the TX" icon="tower-broadcast" href="/flasher/flashing-tx">
+    ESP32-S3, four files, four offsets.
+  </Card>
+  <Card title="Flashing the RX" icon="satellite-dish" href="/flasher/flashing-rx">
+    ESP8285, one file, with optional Betaflight passthrough.
+  </Card>
+  <Card title="Flashing the FC" icon="cpu" href="/flasher/flashing-fc">
+    STM32 over DFU, plus CLI config replay.
+  </Card>
+</CardGroup>
+
+## How the binary is built
+
+Under the hood, `build.py` does three steps:
+
+1. Create a fresh `.venv`.
+2. `pip install -r requirements-build.txt` → installs `pyinstaller` and `pyserial`.
+3. Run `pyinstaller --clean --noconfirm flash-helper.spec`.
+
+The spec file enables a PyInstaller `--onefile` build with `esptool` collected as `datas/binaries/hiddenimports`, and walks `flasher/vendor/dfu-util/` for any platform-specific `dfu-util` binaries to bundle alongside.
+
+The output is one of:
+
+| Platform | Path |
+| --- | --- |
+| macOS / Linux | `dist/flash-helper` |
+| Windows | `dist\flash-helper.exe` |
+
+A `--mode universal` (macOS only) build produces a `universal2` binary when given a `universal2` Python interpreter.
+
+## Continuous integration
+
+`.github/workflows/build.yml` builds native artifacts on macOS, Linux, and Windows for each commit. The workflow also:
+
+- runs `python -m unittest discover -s tests`
+- runs `flash-helper --help` as a smoke test
+
+Releases attach the built binaries directly. See [Install the flasher](/flasher/install).
+
+## Mental model
+
+If you remember nothing else: **`flash-helper` is the only program you need to run** to bring a Nimbus and a drone to a flyable state. Everything else in this section explains the moving parts inside it.

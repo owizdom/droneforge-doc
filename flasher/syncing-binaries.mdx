@@ -1,0 +1,124 @@
+---
+title: "Syncing Binaries (`update.sh`)"
+description: "How firmware-flasher pulls fresh ELRS and Betaflight artifacts from sibling clones into the binaries/ directory."
+icon: "rotate"
+---
+
+`firmware-flasher/update.sh` is the maintainer-side helper that turns the build outputs of [`ExpressLRS-Fork`](https://github.com/Droneforge-Inc/ExpressLRS-Fork) and [`betaflight-fork`](https://github.com/Droneforge-Inc/betaflight-fork) into the `binaries/` layout that `flash-helper` consumes.
+
+## When to run it
+
+Whenever you've rebuilt one of the firmware forks and want to update `binaries/` so the next `flash-helper` invocation uses the new artifacts.
+
+```bash
+cd firmware-flasher
+./update.sh                     # update everything (default)
+./update.sh betaflight          # FC only
+./update.sh elrs                # both Nimbus TX and drone RX
+./update.sh nimbus              # Nimbus TX only
+./update.sh drone               # drone ELRS RX only
+./update.sh betaflight --fc betafpv     # only the BetaFPV FC variant
+./update.sh --dry-run           # show what would change
+```
+
+## Default sibling layout
+
+`update.sh` expects this directory layout next to the `firmware-flasher` clone:
+
+```
+~/code/
+├── ExpressLRS/        ← clone of Droneforge-Inc/ExpressLRS-Fork
+├── betaflight/        ← clone of Droneforge-Inc/betaflight-fork
+└── firmware-flasher/  ← clone of Droneforge-Inc/firmware-flasher  ← run script from here
+```
+
+If yours differs, override:
+
+```bash
+./update.sh \
+  --betaflight-dir   /path/to/betaflight \
+  --expresslrs-dir   /path/to/ExpressLRS \
+  --nimbus-build-dir /path/to/ExpressLRS/src/.pio/build/Unified_ESP32S3_2400_TX_via_UART \
+  --drone-build-dir  /path/to/ExpressLRS/src/.pio/build/Unified_ESP8285_2400_RX_via_BetaflightPassthrough
+```
+
+You can also override individual files via env vars:
+
+```text
+BETAFPV_HEX_SOURCE   AXIS_HEX_SOURCE   LIONBEE_HEX_SOURCE
+BETAFPV_CONFIG_SOURCE   AXIS_CONFIG_SOURCE   LIONBEE_CONFIG_SOURCE
+NIMBUS_BOOTLOADER_SOURCE   NIMBUS_PARTITIONS_SOURCE
+NIMBUS_BOOT_APP0_SOURCE   NIMBUS_FIRMWARE_SOURCE
+DRONE_FIRMWARE_SOURCE
+OBJCOPY            ← override arm-none-eabi-objcopy
+```
+
+## Source paths it reads from (defaults)
+
+```text
+# Betaflight (.hex from make output)
+betaflight/obj/betaflight_4.5.2_STM32G47X_BETAFPVG473.hex     ← BetaFPV
+betaflight/obj/betaflight_4.5.2_STM32F7X2_AXISFLYINGF7AIO.hex ← Axis Flying F7 AIO
+betaflight/obj/betaflight_4.5.2_LIONBEE_V2_REVB.hex           ← Lionbee V2 Rev B
+
+# Betaflight CLI configs
+betaflight/utils/config/whoop-of.txt
+betaflight/utils/config/axis-of.txt
+betaflight/utils/config/lionbee.txt
+
+# ELRS Nimbus TX (PIO output)
+ExpressLRS/src/.pio/build/Unified_ESP32S3_2400_TX_via_UART/{bootloader,partitions,boot_app0,firmware}.bin
+
+# ELRS drone RX (PIO output)
+ExpressLRS/src/.pio/build/Unified_ESP8285_2400_RX_via_BetaflightPassthrough/firmware.bin
+```
+
+## Destination paths it writes to
+
+```text
+binaries/betaflight/bin/{betafpv,axis,lionbee}.bin            ← converted from .hex via objcopy
+binaries/betaflight/config/{whoop-of,axis-of,lionbee}.txt
+binaries/elrs/nimbus/v1/{bootloader,partitions,boot_app0,firmware}.bin
+binaries/elrs/drone/firmware.bin
+```
+
+## The two asset types
+
+`update.sh` distinguishes two operations:
+
+| Type | What it does | Used for |
+| --- | --- | --- |
+| `copy` | Plain file copy with cmp-skip when destination matches. | All `.bin` and `.txt` files. |
+| `hex_to_bin` | `arm-none-eabi-objcopy -I ihex -O binary` then cmp-skip. | The three Betaflight `.hex` files. |
+
+If `objcopy` isn't on `PATH`, the script bails with:
+
+```text
+Required tool not found: arm-none-eabi-objcopy
+```
+
+Override with `--objcopy /path/to/objcopy` or `OBJCOPY=...`.
+
+## Output
+
+For each asset, the script prints one line:
+
+```text
+unchanged  Betaflight BetaFPV firmware
+updated    Nimbus v1 firmware
+would create  Drone ELRS firmware    ← in --dry-run mode
+```
+
+…and ends with a summary:
+
+```text
+Done: 4 updated, 5 unchanged
+```
+
+## Why this is its own script
+
+It would be easy to bake all of this into `flash-helper`. It isn't, on purpose:
+
+- Build artifacts and flash logic are conceptually different. A user shouldn't need to clone Betaflight and ExpressLRS to flash their drone.
+- The matrix changes more often than `flash-helper` itself does (new FC variants, new builds). Keeping the matrix in `update.sh` lets contributors update it without touching the Python code.
+- `update.sh` is opinionated: cmp-skip, objcopy hex→bin conversion, etc. `flash-helper` should be agnostic to where its bins came from.

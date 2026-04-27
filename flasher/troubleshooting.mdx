@@ -1,0 +1,102 @@
+---
+title: "Troubleshooting"
+description: "When flash-helper or the Nimbus link misbehaves, diagnostic flow + the fixes that work."
+icon: "stethoscope"
+---
+
+If something goes sideways, work top-to-bottom through this list. The first match usually wins.
+
+## "I can't find the right serial port"
+
+| Platform | Find the port |
+| --- | --- |
+| macOS | `ls /dev/cu.usbmodem*` (run before & after plugging in to spot the new one) |
+| Linux | `ls /dev/tty{USB,ACM}*` or `dmesg | tail` |
+| Windows | Device Manager → "Ports (COM & LPT)" |
+
+If the device doesn't appear at all:
+- Try a different USB-C cable. Charge-only cables look identical to data cables.
+- Try a different port on your computer (some hubs eat low-power CDC devices).
+- On Windows, install the chip-specific driver (CH340, CP210x, or generic USB-CDC for native ESP32-S3 / STM32).
+
+## "The flash starts but esptool can't connect"
+
+Symptoms: `Failed to connect to ESP32-S3` or `A fatal error occurred: Could not connect`.
+
+1. Confirm `--port` matches the *target* board's CDC, not the FC's. Easy mistake when both are plugged in.
+2. The board may need to be in download mode manually:
+   - Hold BOOT (or "FLASH") on the Nimbus TX, tap RESET, release BOOT, retry the flasher.
+3. If using `--passthrough` for the RX, see the dedicated checklist on [Flashing the RX](/flasher/flashing-rx#common-failure-modes).
+
+## "Passthrough fails on `serialrx_*` validation"
+
+The FC config is incompatible. In Betaflight Configurator → Receiver:
+
+```text
+Receiver mode  → Serial (via UART)
+Provider       → CRSF (or ELRS)
+Inverted       → off
+Half-duplex    → Off or Auto
+```
+
+Save & reboot. Re-run the flasher with `--passthrough`.
+
+## "Linux: errno 22 during passthrough"
+
+The flasher already handles this with baud-candidate retry (`420000 → 230400 → 115200`). If it exhausts the candidates:
+
+1. Power-cycle the drone (USB unplug → wait 5s → replug).
+2. Close any open Betaflight Configurator session, it may be holding the port.
+3. Retry.
+
+If the failure persists after a power-cycle, you're likely hitting an actual `pyserial` / kernel bug specific to your USB-CDC hardware. File an issue with `dmesg | tail -50` output.
+
+## "FC reboots into bootloader but DFU never appears"
+
+`flash-helper` does a before/after diff on `dfu-util -l`. If the after-set is empty:
+
+1. Confirm `dfu-util -l` works at all from your shell. If it doesn't, install the right `libusb` (`brew install libusb` / `apt install libusb-1.0-0`).
+2. On Windows, the STM32 BOOTLOADER device needs the **WinUSB** driver. Use [Zadig](https://zadig.akeo.ie/) to switch the driver.
+3. On Linux, add a udev rule for `0483:df11`:
+
+   ```text
+   /etc/udev/rules.d/99-stm32-dfu.rules
+   SUBSYSTEM=="usb", ATTR{idVendor}=="0483", ATTR{idProduct}=="df11", MODE="0666"
+   ```
+
+   Then `sudo udevadm control --reload && sudo udevadm trigger`.
+
+## "Multiple new DFU devices appeared"
+
+You have another STM32 in DFU mode plugged in (an ESC tool, a dev board). Unplug everything except the FC and retry.
+
+## "The flash succeeds but the drone won't bind"
+
+1. Read `df_version` from both sides in the desktop app (status panel). Mismatch → re-flash the older side.
+2. Confirm the binding phrase. The DroneForge fork ships a default; if a previous user changed it, you'll need to know it (or re-flash to reset to default).
+3. Power-cycle the RX three times to enter bind mode (three quick LED flashes). Click **Bind** in the app while it's flashing.
+
+## "The link binds but throttle never moves"
+
+In the desktop app's Deploy tab:
+
+1. Check the **four-channel status** indicator (right pane). Are all four channels at sane neutral values when sticks are at center?
+2. Confirm the FC sees the channels, open Betaflight Configurator → Receiver tab, watch the bars. They should track stick movement on the Nimbus app.
+3. If the FC sees them but the drone won't arm:
+   - Aux1 must be high enough (≥1800) for arming, depending on your arming switch config.
+   - Throttle must be low (≤200 raw, ≤1050 mapped CRSF).
+   - No FC arming-prevention flag should be set (`arming_disable_flags` in CLI).
+
+## "The video feed is black"
+
+This is the VRX, not the link. Use the **Scan** button in the desktop app to cycle the 5.8 GHz channels until video appears. See [VRX controls](/app/vrx-controls).
+
+## "The desktop app doesn't see the Nimbus TX"
+
+1. The TX must enumerate as a serial device (same one you flashed to).
+2. The app polls a fixed CDC interface, if you have multiple Nimbus TXs plugged in, only one will be selected.
+3. Confirm the TX's status LED on GPIO 2 is on. If it's dark, the firmware didn't boot, see *"Flash succeeds but Nimbus doesn't boot"* in [Flashing the TX](/flasher/flashing-tx#common-failure-modes).
+
+## When in doubt: re-flash all three
+
+When debugging gets weird, re-flash *both sides of the link plus the FC* with a known-good binary set. The firmware-flasher repo's `binaries/` directory is curated to be self-consistent, when in doubt, flash the latest committed set.

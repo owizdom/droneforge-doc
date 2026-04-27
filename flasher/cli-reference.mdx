@@ -1,0 +1,162 @@
+---
+title: "CLI Reference"
+description: "Every flag flash-helper accepts, what it defaults to, and which target uses it."
+icon: "terminal"
+---
+
+`flash-helper` is one binary with three target modes: `tx`, `rx`, `fc`. Most flags are shared; a few are mode-specific.
+
+## Top-level
+
+```bash
+flash-helper --target {rx|tx|fc} --port <port> [options]
+```
+
+<ParamField path="--target" type="rx | tx | fc" required>
+  Selects the flashing flow:
+  - `tx`. Nimbus TX (ESP32-S3, four-file partition layout).
+  - `rx`. Drone-side ELRS RX (ESP8266/ESP8285, single firmware).
+  - `fc`. Betaflight flight controller (STM32 over DFU).
+</ParamField>
+
+<ParamField path="--port" type="path" required>
+  The serial port to talk to. Examples:
+  - macOS: `/dev/cu.usbmodem11401`
+  - Linux: `/dev/ttyUSB0` or `/dev/ttyACM0`
+  - Windows: `COM3`
+</ParamField>
+
+<ParamField path="--baud" type="int">
+  Override the baud rate. For TX/RX this is the esptool flashing baud; for FC it's the CLI baud (default `115200`).
+</ParamField>
+
+## TX & RX (ESP-flashing) flags
+
+<ParamField path="--bin-root" type="path" default=".">
+  Directory containing the firmware bins. The flasher tries `<bin-root>/<target>/firmware.bin` first, then `<bin-root>/firmware.bin`.
+</ParamField>
+
+<ParamField path="--chip" type="esp8266 | esp32 | esp32-c3 | esp32-s3">
+  Override chip detection. Defaults are `esp32-s3` for `--target tx`, `esp8266` for `--target rx`.
+</ParamField>
+
+<ParamField path="--bootloader" type="path">
+  Override the path to `bootloader.bin` (TX only).
+</ParamField>
+
+<ParamField path="--partitions" type="path">
+  Override the path to `partitions.bin` (TX only).
+</ParamField>
+
+<ParamField path="--app-select" type="path">
+  Override the path to `boot_app0.bin` (TX only).
+</ParamField>
+
+<ParamField path="--firmware-addr" type="hex int">
+  Override the firmware flash address. Default `0x10000` for TX, `0x0000` for RX.
+</ParamField>
+
+<ParamField path="--bootloader-addr" type="hex int">
+  Override the bootloader flash address. Default `0x0000` on ESP32-S3/C3, `0x1000` on classic ESP32.
+</ParamField>
+
+<ParamField path="--partitions-addr" type="hex int" default="0x8000">
+  Partition-table address.
+</ParamField>
+
+<ParamField path="--app-select-addr" type="hex int" default="0xe000">
+  `boot_app0` address.
+</ParamField>
+
+## RX-only flags
+
+<ParamField path="--passthrough" type="flag">
+  Route the flash through Betaflight CLI passthrough. The flasher opens the FC's CLI, validates `serialrx_provider` / `serialrx_inverted` / `serialrx_halfduplex`, finds the SerialRX UART, issues `serialpassthrough`, then sends a CRSF bootloader-reset sequence to drop the RX into ROM bootloader. See [Flashing the RX](/flasher/flashing-rx).
+</ParamField>
+
+## FC-only flags
+
+<ParamField path="--firmware" type="path" required>
+  Path to the FC firmware `.bin`. (Use `arm-none-eabi-objcopy -I ihex -O binary` to convert Betaflight's `.hex`.)
+</ParamField>
+
+<ParamField path="--config" type="path" required>
+  Path to a Betaflight CLI config file. Streamed into the CLI after the DFU flash completes.
+</ParamField>
+
+<ParamField path="--dfu-util" type="path">
+  Override the `dfu-util` binary. By default, the flasher resolves it from the bundled `flasher/vendor/dfu-util/<platform-arch>/` directory, then `PATH`. See [Install the flasher → Bundled tools](/flasher/install#bundled-tools).
+</ParamField>
+
+## Examples
+
+### Flash a Nimbus TX
+
+```bash
+flash-helper --target tx \
+  --port /dev/cu.usbmodem11401 \
+  --bin-root /path/to/elrs/nimbus/v1
+```
+
+### Flash a drone RX directly (bench)
+
+```bash
+flash-helper --target rx \
+  --port /dev/cu.usbmodem11401 \
+  --bin-root /path/to/elrs/drone
+```
+
+### Flash a drone RX through Betaflight passthrough
+
+```bash
+flash-helper --target rx \
+  --port /dev/cu.usbmodem11401 \
+  --bin-root /path/to/elrs/drone \
+  --passthrough
+```
+
+### Flash a BetaFPV FC
+
+```bash
+flash-helper --target fc \
+  --port /dev/cu.usbmodem11401 \
+  --firmware /path/to/binaries/betaflight/bin/betafpv.bin \
+  --config   /path/to/binaries/betaflight/config/whoop-of.txt
+```
+
+### Flash an Axis Flying F7 AIO
+
+```bash
+flash-helper --target fc \
+  --port /dev/cu.usbmodem11401 \
+  --firmware /path/to/binaries/betaflight/bin/axis.bin \
+  --config   /path/to/binaries/betaflight/config/axis-of.txt
+```
+
+### Override every address explicitly (TX)
+
+```bash
+flash-helper --target tx \
+  --port /dev/cu.usbmodem11401 \
+  --bin-root /path/to/elrs/nimbus/v1 \
+  --bootloader-addr 0x0 \
+  --partitions-addr 0x8000 \
+  --app-select-addr 0xe000 \
+  --firmware-addr   0x10000
+```
+
+## Defaults reference
+
+| Constant (in `simple_usb_upload.py`) | Value |
+| --- | --- |
+| `BOOTLOADER_ADDR` (esp32) | `0x1000` |
+| `BOOTLOADER_ADDR_S3` (esp32-s3 / esp32-c3) | `0x0000` |
+| `PARTITIONS_ADDR` | `0x8000` |
+| `APP_SELECT_ADDR` | `0xe000` |
+| `TX_FIRMWARE_ADDR` | `0x10000` |
+| `RX_FIRMWARE_ADDR` | `0x0000` |
+| `FC_DFU_ADDRESS` | `0x08000000:leave` |
+| `FC_CLI_BAUD` | `115200` |
+| `FC_BOOTLOADER_DELAY` | `1.0` s |
+| `FC_REBOOT_DELAY` | `5.0` s |
+| `RX_PASSTHROUGH_BAUD_CANDIDATES` | `(420000, 230400, 115200)` |

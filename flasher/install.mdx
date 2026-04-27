@@ -1,0 +1,136 @@
+---
+title: "Install the Flasher"
+description: "Get flash-helper onto your machine. Two paths: download a release artifact, or build it from source in five minutes."
+icon: "download"
+---
+
+You can either download a release binary or build from source. Most users should download.
+
+## Option 1. Download a release
+
+The CI workflow attaches macOS / Linux / Windows binaries to each release on the `firmware-flasher` repo:
+
+```text
+https://github.com/Droneforge-Inc/firmware-flasher/releases
+```
+
+Pick the one matching your OS, then make it executable:
+
+<Tabs>
+  <Tab title="macOS (Apple Silicon)">
+    ```bash
+    chmod +x flash-helper
+    xattr -d com.apple.quarantine flash-helper 2>/dev/null || true
+    ./flash-helper --help
+    ```
+
+    The `xattr` line is needed because Apple's Gatekeeper quarantines unsigned executables downloaded from a browser.
+  </Tab>
+  <Tab title="Linux">
+    ```bash
+    chmod +x flash-helper
+    ./flash-helper --help
+    ```
+
+    Make sure your user is in the `dialout` group (or whatever group owns `/dev/ttyUSB*`):
+
+    ```bash
+    sudo usermod -aG dialout $USER
+    # log out / log in for it to take effect
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    .\flash-helper.exe --help
+    ```
+
+    Windows may flag an unsigned binary on first run. Click "More info" → "Run anyway" in the SmartScreen dialog.
+  </Tab>
+</Tabs>
+
+## Option 2. Build from source
+
+You'll need Python 3.10+ on the host doing the build. The build is hermetic, it creates its own venv.
+
+```bash
+git clone https://github.com/Droneforge-Inc/firmware-flasher
+cd firmware-flasher/flasher
+```
+
+<Tabs>
+  <Tab title="Native build (any platform)">
+    ```bash
+    python3 build.py --mode native
+    # → dist/flash-helper (macOS/Linux) or dist\flash-helper.exe (Windows)
+    ```
+  </Tab>
+  <Tab title="macOS universal2">
+    Requires a `universal2` Python interpreter (Apple's `python.org` builds qualify):
+
+    ```bash
+    python3 build.py --mode universal \
+      --python /Library/Frameworks/Python.framework/Versions/3.12/bin/python3
+    ```
+
+    The output binary runs natively on both Apple Silicon and Intel Macs.
+  </Tab>
+  <Tab title="Convenience wrappers">
+    ```bash
+    ./build.sh --mode native    # macOS / Linux
+    .\build.ps1 --mode native   # Windows
+    ```
+
+    These call `build.py` with the same defaults.
+  </Tab>
+</Tabs>
+
+### Build flags
+
+| Flag | Purpose |
+| --- | --- |
+| `--mode native` | Build for the current OS/arch (default). |
+| `--mode universal` | macOS only, produce a `universal2` binary. |
+| `--python PATH` | Python interpreter for the venv. Default: the one running `build.py`. |
+| `--venv PATH` | Override venv location. Default: `flasher/.venv`. |
+| `--pyinstaller-config-dir PATH` | Override PyInstaller's config dir. Default: `flasher/.pyinstaller`. |
+
+### What the spec includes
+
+The PyInstaller spec (`flash-helper.spec`):
+
+- Collects all of `esptool`'s `datas`, `binaries`, and `hiddenimports`.
+- Walks `flasher/vendor/dfu-util/` recursively. Files matching `dfu-util`, `*.dylib`, `*.dll`, `*.so`, or `.so.*` go in as **binaries**; everything else as **datas**.
+- Builds **onefile** with `console=True`, `upx=True`, `argv_emulation=False`.
+
+## Bundled tools
+
+To make FC flashing self-contained on a machine without `dfu-util` on `PATH`, drop platform-specific binaries here before building:
+
+```text
+flasher/vendor/dfu-util/macos-arm64/dfu-util
+flasher/vendor/dfu-util/macos-arm64/libusb-1.0.0.dylib
+flasher/vendor/dfu-util/linux-x86_64/dfu-util
+flasher/vendor/dfu-util/windows-x86_64/dfu-util.exe
+```
+
+At runtime, `flash-helper` resolves `dfu-util` in this order:
+
+1. `--dfu-util <path>` flag.
+2. Bundled binary in the platform-arch directory above.
+3. `dfu-util` on `PATH`.
+
+The library-path environment is also patched per platform (`DYLD_LIBRARY_PATH` on macOS, `PATH` on Windows, `LD_LIBRARY_PATH` on Linux) so the bundled `libusb` is found.
+
+<Note>
+  If your bundled `dfu-util` is single-arch, the FC flashing path is only self-contained on that arch, even if the main `flash-helper` binary is `universal2`.
+</Note>
+
+## Sanity check
+
+Once installed, verify:
+
+```bash
+flash-helper --help
+```
+
+You should see the full argument table for `--target`, `--port`, `--bin-root`, `--passthrough`, `--firmware`, `--config`, `--dfu-util`, and the address overrides.

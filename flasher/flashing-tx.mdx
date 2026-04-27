@@ -1,0 +1,119 @@
+---
+title: "Flashing the Nimbus TX"
+description: "End-to-end TX flashing flow: file layout, addresses, ports, and what to do when esptool gets stuck."
+icon: "tower-broadcast"
+---
+
+The Nimbus TX is an ESP32-S3 with a four-file partition layout. `flash-helper --target tx` writes all four files in one invocation.
+
+## The command
+
+```bash
+flash-helper \
+  --target tx \
+  --port /dev/cu.usbmodem11401 \
+  --bin-root /path/to/elrs/nimbus/v1
+```
+
+`--bin-root` should contain:
+
+```
+bootloader.bin
+partitions.bin
+boot_app0.bin
+firmware.bin
+```
+
+The flasher first checks `<bin-root>/tx/firmware.bin`, then `<bin-root>/firmware.bin`, both layouts work.
+
+## Default addresses
+
+| File | Address |
+| --- | --- |
+| `bootloader.bin` | `0x0000` |
+| `partitions.bin` | `0x8000` |
+| `boot_app0.bin`  | `0xe000` |
+| `firmware.bin`   | `0x10000` |
+
+All four are derived from the standard ESP-IDF partition table. `flash-helper` uses `BOOTLOADER_ADDR_S3 = 0x0` for the bootloader on ESP32-S3 / ESP32-C3 (vs `0x1000` on classic ESP32).
+
+You can override any address explicitly:
+
+```bash
+flash-helper --target tx --port ... --bin-root ... \
+  --bootloader-addr 0x0 \
+  --partitions-addr 0x8000 \
+  --app-select-addr 0xe000 \
+  --firmware-addr 0x10000
+```
+
+## Port detection
+
+Plug Nimbus in over USB-C and find the new device node:
+
+| Platform | Typical port |
+| --- | --- |
+| macOS | `/dev/cu.usbmodem11401` (varies; `ls /dev/cu.usbmodem*` works) |
+| Linux | `/dev/ttyUSB0` (CH340/CP210x) or `/dev/ttyACM0` (native USB-CDC) |
+| Windows | `COM3` (varies; check Device Manager) |
+
+## What `flash-helper` does internally
+
+Most of the action is in `simple_usb_upload.py`. For TX flashing, it:
+
+1. Resolves the four bin files (with the optional `--bootloader / --partitions / --app-select / --firmware` overrides).
+2. Picks the chip, defaults to `esp32-s3` for `--target tx`.
+3. Builds an `esptool` argument list of (address, file) pairs.
+4. Calls `esptool.main(...)` directly (vendored via PyInstaller, no subprocess).
+
+If any step fails, you get a structured error:
+
+```text
+Flash ELRS firmware with esptool failed (chip=esp32-s3, port=/dev/cu.usbmodem11401):
+  RuntimeError: <esptool's error>
+```
+
+The structured `FlashStepError` (in `simple_usb_upload.py`) wraps the underlying exception with the step name and details, keeps the traceback short and actionable.
+
+## Common failure modes
+
+<AccordionGroup>
+  <Accordion title="`Failed to connect to ESP32-S3`">
+    The Nimbus TX needs to be in download mode for `esptool` to talk to it. Most Nimbus boards do this automatically via DTR/RTS handshake, but a USB-C cable that's *charge-only* (no data lines) will look identical to a flat board.
+
+    1. Try a different USB-C cable.
+    2. Hold the BOOT button (if your TX has one), tap RESET, release BOOT, then run the flasher.
+    3. Confirm you're on the right port: `ls /dev/cu.usbmodem*` should list a new device when you plug in.
+  </Accordion>
+
+  <Accordion title="`Permission denied: /dev/ttyUSB0`">
+    Linux: add yourself to `dialout` (Debian/Ubuntu) or `uucp` (Arch):
+
+    ```bash
+    sudo usermod -aG dialout $USER
+    # log out / log in
+    ```
+
+    Until then, prefix the command with `sudo` if you must.
+  </Accordion>
+
+  <Accordion title="`Bin not found at 0x10000`">
+    `--bin-root` doesn't contain `firmware.bin`. The flasher looks at `<bin-root>/firmware.bin` first, then `<bin-root>/tx/firmware.bin`. Either flatten the layout or pass an explicit `--firmware /path/to/firmware.bin`.
+  </Accordion>
+
+  <Accordion title="Flash succeeds but Nimbus doesn't boot">
+    Almost always a partition mismatch. The Nimbus boot relies on `boot_app0.bin` at `0xe000` to select between OTA app slots. If you flashed a `firmware.bin` from one ELRS revision and `partitions.bin` from another, the chip can boot into a slot that's empty.
+
+    Fix: always flash all four files together from the same build. The `firmware-flasher` repo's `binaries/elrs/nimbus/v1/` is curated to keep them in sync.
+  </Accordion>
+</AccordionGroup>
+
+## Verifying the flash
+
+After flashing, the TX should:
+
+1. Light its status LED on GPIO 2 (steady or breathing pattern depending on bind state).
+2. Enumerate as a CDC serial device (the same port you flashed).
+3. When you open the desktop app, show up in the **Nimbus connection indicator** in the top-right.
+
+If the indicator stays gray, see [Troubleshooting](/flasher/troubleshooting).
