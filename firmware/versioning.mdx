@@ -1,0 +1,76 @@
+---
+title: "Versioning (`df_version`)"
+description: "How DroneForge stamps a hardware/firmware version pair across the TX, RX, and FC, and how the host uses it to detect mismatches."
+icon: "tag"
+---
+
+`df_version` is DroneForge's own version tuple, layered on top of upstream version strings (ELRS version, Betaflight 4.5.2, etc.). It's what the desktop app uses to recognize a Nimbus + drone pair as *consistent* before letting you fly.
+
+## Why a custom version
+
+Upstream version numbers don't capture Nimbus-specific state. ELRS's "version 3.4.x" doesn't tell you whether this build has the OPTRANGE frame or the MCU-UID change. Betaflight's "4.5.2" doesn't tell you whether the optical-flow driver is present.
+
+`df_version` is the missing piece: a small pair of integers (or short strings) that uniquely identify the *DroneForge cut* of each firmware.
+
+## Where it lives
+
+It's introduced (and bumped) in three places:
+
+<CardGroup cols={3}>
+  <Card title="ExpressLRS fork" icon="tower-broadcast">
+    Commit: `add custom versioning for hardware and firmware (#5)`
+    <br />
+    Telemetry frame, set in firmware constants.
+  </Card>
+  <Card title="Betaflight fork" icon="microchip">
+    Commit: `Feat/df version (#6)`
+    <br />
+    `update df version`, `bump versions on bf and elrs`.
+  </Card>
+  <Card title="firmware-flasher" icon="bolt">
+    Commits like `bump version on bins`, `update df version` in the binary store under `binaries/`.
+  </Card>
+</CardGroup>
+
+## Wire format
+
+`df_version` is carried on a dedicated CRSF frame. The frame conveys both a **hardware version** and a **firmware version**, enough for the host to verify a flashed board against what the desktop app expects.
+
+The exact byte layout is defined by the fork's CRSF frame definitions and is subject to bumps with each `df_version` change. For the canonical structure, read the source in the [ExpressLRS fork](https://github.com/Droneforge-Inc/ExpressLRS-Fork) and the matching changes in the [Betaflight fork](https://github.com/Droneforge-Inc/betaflight-fork). When the wire format changes, `df_version` is bumped, there is no scenario where two different formats coexist on the wire under the same version.
+
+## How the host uses it
+
+The desktop app reads `df_version` from both the RX and the FC sides and surfaces:
+
+- A green checkmark if both match the version the app was built against.
+- An orange warning if either side is older than expected (you should re-flash).
+- A red error if the *hardware* version reports a board the app doesn't know how to drive.
+
+Because the FC's `df_version` is included in *its* version frame too, the app can independently verify the radio link and the FC. A drone with an older RX firmware but an up-to-date FC, or vice versa, is detected before flight.
+
+## Bumping `df_version`
+
+When you ship a change that:
+
+- adds or modifies a telemetry frame, or
+- changes a hardware target's pinout, or
+- changes an agent-runtime input variable that the firmware feeds,
+
+bump `df_version` on the relevant side. Cross-reference: the `firmware-flasher` repo's commit history shows the cadence (`bump versions on bf and elrs`, `update df version for elrs`, `bump firmware version for drone id req`, etc.), typically a few bumps per release window.
+
+## Reading the version from a flashed board
+
+The desktop app shows `df_version` in the status panel, but you can also read it manually:
+
+<Tabs>
+  <Tab title="From Betaflight CLI">
+    ```text
+    version
+    ```
+
+    The fork appends the `df_version` string to Betaflight's standard version output.
+  </Tab>
+  <Tab title="From the link telemetry">
+    Open the desktop app, go to **Deploy** → **Live telemetry** view (or the Flight tab post-flight). The `df_version` frame is decoded and displayed alongside link quality.
+  </Tab>
+</Tabs>

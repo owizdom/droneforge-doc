@@ -1,0 +1,65 @@
+---
+title: "Firmware Overview"
+description: "What 'Nimbus firmware' actually means, the three forks, what each adds, and how they relate to upstream."
+icon: "memory"
+---
+
+DroneForge maintains three firmware forks and one Python tool that ships their output. Together they form the *firmware* layer of Nimbus.
+
+| Repo | Upstream | Role | Branch / default |
+| --- | --- | --- | --- |
+| [`ExpressLRS-Fork`](https://github.com/Droneforge-Inc/ExpressLRS-Fork) | [ExpressLRS](https://github.com/ExpressLRS/ExpressLRS) | Radio link firmware (TX + RX). | `nimbus/main` |
+| [`betaflight-fork`](https://github.com/Droneforge-Inc/betaflight-fork) | [Betaflight](https://github.com/betaflight/betaflight) | Flight controller firmware. | `nimbus/main` |
+| [`firmware-flasher`](https://github.com/Droneforge-Inc/firmware-flasher) | (none, first-party) | Distributes binaries + bundles `flash-helper`. | `main` |
+| [`lerobot-fork`](https://github.com/Droneforge-Inc/lerobot-fork) | [Hugging Face LeRobot](https://github.com/huggingface/lerobot) | Off-board policy training. | `main` |
+
+`lerobot-fork` is included in the firmware overview only because trained policies eventually become an artifact the agent runtime loads. The other three are firmware in the strict sense.
+
+## The three forks at a glance
+
+<CardGroup cols={3}>
+  <Card title="ExpressLRS fork" icon="tower-broadcast" href="/firmware/expresslrs">
+    Custom Nimbus TX hardware target, 500 Hz "nimbus/df" rate, VRX SPI/BBS, MCU-UID + link-state telemetry, `df_version`.
+  </Card>
+  <Card title="Betaflight fork" icon="microchip" href="/firmware/betaflight">
+    Optical-flow driver (Micolink), OPTRANGE telemetry, EKF raw-IMU bins, support for BetaFPV / Axis F7 / Lionbee, `df_version` integration.
+  </Card>
+  <Card title="firmware-flasher" icon="bolt" href="/flasher/overview">
+    `flash-helper` CLI plus prebuilt binaries under `binaries/`, plus the `update.sh` sync helper that turns build outputs in sibling clones into flash-ready artifacts.
+  </Card>
+</CardGroup>
+
+## License
+
+| Fork | License |
+| --- | --- |
+| `ExpressLRS-Fork` | GPL-3.0 (inherited) |
+| `betaflight-fork` | GPL-3.0 (inherited) |
+| `lerobot-fork`    | Apache-2.0 (inherited) |
+| `firmware-flasher`| Per-file (mostly first-party) |
+
+DroneForge respects the upstream licenses; modifications are published under the same terms.
+
+## Versioning
+
+Across all three firmware forks, DroneForge layers a **`df_version`** on top of the upstream version string. It carries:
+
+- A **hardware version** (the `DIY S3 Nimbus` rev, the FC variant)
+- A **firmware version** (DroneForge's own)
+
+The host uses these to detect mismatches end-to-end. See [Versioning](/firmware/versioning) for the schema and the wire-format frame.
+
+## The build matrix
+
+```
+ExpressLRS-Fork
+├── TX:  pio run -e Unified_ESP32S3_2400_TX_via_UART --target upload
+└── RX:  pio run -e Unified_ESP8285_2400_RX_via_BetaflightPassthrough
+
+betaflight-fork
+├── BetaFPV  → make TARGET=STM32G47X_BETAFPVG473       → obj/betaflight_4.5.2_STM32G47X_BETAFPVG473.hex
+├── Axis F7  → make TARGET=STM32F7X2_AXISFLYINGF7AIO   → obj/betaflight_4.5.2_STM32F7X2_AXISFLYINGF7AIO.hex
+└── Lionbee  → make TARGET=LIONBEE_V2_REVB             → obj/betaflight_4.5.2_LIONBEE_V2_REVB.hex
+```
+
+The flasher's `update.sh` knows about every entry in this matrix, running it from a checkout of `firmware-flasher`, with sibling clones of `ExpressLRS-Fork` (named `ExpressLRS`) and `betaflight-fork` (named `betaflight`), copies all the right artifacts into `binaries/`. See [Syncing binaries](/flasher/syncing-binaries).

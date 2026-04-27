@@ -1,0 +1,128 @@
+---
+title: "Betaflight Fork (`nimbus/main`)"
+description: "DroneForge's customized Betaflight firmware. Optical-flow stabilization, OPTRANGE telemetry, FC variants for BetaFPV / Axis Flying F7 / Lionbee."
+icon: "microchip"
+---
+
+The [`Droneforge-Inc/betaflight-fork`](https://github.com/Droneforge-Inc/betaflight-fork) repo tracks Betaflight upstream on the **`nimbus/main`** branch. Below is what's new versus stock Betaflight 4.5.x.
+
+## The big addition: optical-flow stabilization
+
+Stock Betaflight has limited optical-flow support; for indoor FPV stability you typically need an external module. The fork integrates **Micolink-protocol optical-flow + range** as a first-class driver.
+
+Commits, in chronological order:
+
+```text
+optical flow driver for betaflight (#4)
+  * start optflow update
+  * optical driver maybe
+  * mtf range
+  * optflow sensor, maybe
+  * crsf stuff
+  * it builds
+  * cli stuff
+  * maybe range
+  * range woohoo
+  * get of working
+  * lpf on vel
+  * better filtering for of
+  * even more smooth of lpf
+
+Always set MTF sensor to use Micolink protocol (#5)
+  * set mtf to micolink protocol on task init
+  * cleanup
+```
+
+Concretely, the fork adds:
+
+- A **Micolink protocol parser** for the MTF (range/flow) sensor.
+- A new optical-flow task that runs at the **official sensor refresh rate** (`set OF task rate to official sensor refresh rate`), not Betaflight's default lazy schedule.
+- **Velocity LPF** filtering on the flow output (`lpf on vel`, `better filtering for of`, `even more smooth of lpf`).
+- An **`optrange_*`** set of variables wired up to telemetry, surfaced to the agent runtime as `optrange_distance`, `optrange_velX`, `optrange_velY`, `optrange_vz_measured`, and `optrange_valid`.
+
+The agent-side names live in [Inputs and variables → Optical range](/agents/inputs-and-variables#optical-range-optrange).
+
+## OPTRANGE telemetry frame
+
+Beyond the FC's local use of optical flow for stabilization, the fork forwards the data up to the link as a dedicated CRSF frame (`send optrange frame for whoop`). The ELRS fork then bundles it into the host telemetry stream so the agent runtime can use it as input. End-to-end:
+
+```
+Micolink sensor → FC optical-flow task → CRSF telemetry frame → ELRS RX → ELRS TX → host app → agent variables
+```
+
+## EKF raw-IMU bins
+
+Two builds with raw IMU exposed for the EKF were shipped (commit: `bins for raw imu in ekf only`, `update binaries with bf-state changes`). These let host-side state estimators read the IMU directly when they need to fuse it with vision.
+
+## FC variants
+
+Three Betaflight target builds are supported:
+
+| Variant | Target | CLI config |
+| --- | --- | --- |
+| BetaFPV (Whoop) | `STM32G47X_BETAFPVG473` | `whoop-of.txt` |
+| Axis Flying F7 AIO | `STM32F7X2_AXISFLYINGF7AIO` | `axis-of.txt` |
+| Lionbee V2 Rev B | `LIONBEE_V2_REVB` | `lionbee.txt` |
+
+The Axis FC was added later in the project (`add axis fc`, `axis tlm working better now`). Lionbee shipped with a few project-specific carve-outs (FC initialization tweaks; the ELRS side likewise skips telemetry-ratio auto-changes for Lionbee).
+
+## Vario + disarmed VSPD
+
+The fork enables **vario** (rate-of-climb) telemetry plus **disarmed vspd** so the host knows the drone's vertical state even before arming (commit: `vario + disarmed vspd`). Useful for landing-detection logic in agents.
+
+## VTX channel update script
+
+A small utility to bump a Whoop's onboard VTX channel when running custom firmware:
+
+```text
+scripts for updated whoop vtx when using custom firmware
+add whoop config file
+```
+
+The script lives in `scripts/` in the fork. Most users won't need it, the default `whoop-of.txt` config has the VTX assignment baked in.
+
+## CLI configs
+
+Each FC has a paired CLI configuration file under `utils/config/`:
+
+```text
+betaflight/utils/config/whoop-of.txt
+betaflight/utils/config/axis-of.txt
+betaflight/utils/config/lionbee.txt
+```
+
+These are streamed into the FC's CLI by `flash-helper --target fc --config <path>` after the firmware is flashed. They set:
+
+- Serial port assignments (which UART carries CRSF, which carries the optical-flow sensor)
+- Optical-flow task config (rate, sensor selection)
+- Telemetry settings (vario, vspd, OPTRANGE)
+- Default rates and PID profiles for that airframe
+
+If you re-flash a board, **always** re-apply the matching config. Betaflight does not preserve all settings across firmware versions.
+
+## Building from source
+
+```bash
+git clone https://github.com/Droneforge-Inc/betaflight-fork
+cd betaflight-fork
+git checkout nimbus/main
+
+# Pick one:
+make TARGET=STM32G47X_BETAFPVG473
+make TARGET=STM32F7X2_AXISFLYINGF7AIO
+make TARGET=LIONBEE_V2_REVB
+```
+
+Outputs land under `obj/`. Convert to `.bin` for `flash-helper` either by running the flasher's `update.sh` (which invokes `arm-none-eabi-objcopy`) or manually:
+
+```bash
+arm-none-eabi-objcopy -I ihex -O binary \
+  obj/betaflight_4.5.2_STM32G47X_BETAFPVG473.hex \
+  betafpv.bin
+```
+
+See [Building from source](/firmware/building-from-source) for the full toolchain setup.
+
+## What stays upstream
+
+The fork doesn't try to reinvent Betaflight. Anything that isn't in the list above. PID loops, motor mixing, Blackbox, OSD, RX-failsafe behavior, configurator compatibility, is **stock Betaflight 4.5.2** and will get fixes by merging upstream periodically.

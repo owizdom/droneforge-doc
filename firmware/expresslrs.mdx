@@ -1,0 +1,121 @@
+---
+title: "ExpressLRS Fork (`nimbus/main`)"
+description: "DroneForge's customized ELRS firmware for the Nimbus TX and the drone-side RX. What it adds on top of upstream and how to build it."
+icon: "tower-broadcast"
+---
+
+The [`Droneforge-Inc/ExpressLRS-Fork`](https://github.com/Droneforge-Inc/ExpressLRS-Fork) repo tracks ExpressLRS upstream on the **`nimbus/main`** branch. Below is a focused tour of *what changed* and why.
+
+## The Nimbus TX hardware target
+
+The most visible addition is a brand-new TX target:
+
+- File: `src/hardware/TX/DIY S3 Nimbus.json`
+- Hardware option name: `DIY ESP32-S3 Nimbus 2.4Ghz TX`
+- Build env: `Unified_ESP32S3_2400_TX_via_UART`
+
+See [Nimbus TX hardware](/hardware/nimbus-tx) for the full pin map. The same JSON is reproduced verbatim under [Reference → Hardware pinout](/reference/hardware-pinout).
+
+## Custom packet rate
+
+A **500 Hz** rate, branded `nimbus/df`, is added to the rate table. From commit `Increase telemetry rate (#2)`:
+
+```text
+* 500hz
+* DEFAULT BINDING PHRASE
+* add custom rate for nimbus/df
+* change default config
+* change binding phrase
+```
+
+This rate ships as the *default* on the Nimbus TX. Stock ELRS rates remain available, picking a non-Nimbus rate just means losing the 500 Hz / OPTRANGE telemetry advantage.
+
+## Telemetry: link-state, MCU-UID, OPTRANGE, df_version
+
+The fork adds (or extends) four telemetry frame types.
+
+### Link-state frame
+
+A per-packet representation of how the link itself is doing. Carries a small struct that the host reads to distinguish "RX is silent because of interference" from "RX is silent because the drone unplugged."
+
+Source: commit `add telemetry frame representing state of radio link (#4)`.
+
+### MCU-UID frame
+
+The drone-side ESP8285 has a 6-byte MCU UID burned at the factory. The fork captures it and pushes it back to the host on first telemetry. The desktop app uses this to remember a drone across reboots.
+
+Source: PR `feat/mcu-uid-frame`, follow-up `sending mcu uid to proper device with spi elrs`.
+
+### OPTRANGE frame
+
+The Betaflight fork's optical-range driver pushes its data over CRSF to the RX, which forwards it to the host as a dedicated frame. Surfaces in the agent runtime as `optrange_distance`, `optrange_velX`, `optrange_velY`, `optrange_vz_measured`, `optrange_valid`. See: [Inputs and variables → Optical range](/agents/inputs-and-variables#optical-range-optrange).
+
+### df_version frame
+
+DroneForge's own (hardware version, firmware version) tuple. See [Versioning](/firmware/versioning) for the schema. The host uses it to flag mixed-revision flashes before they cause subtle bugs.
+
+Source: commit `add custom versioning for hardware and firmware (#5)`.
+
+## VRX channel selection over BBS
+
+The Nimbus TX's 5.8 GHz video receiver sits on a backplane bus driven by SPI. The fork adds the channel-select code path:
+
+```text
+Add VRX channel selection to ELRS (#1)
+  Adds VRX code + implements SPI (BBS) mode to enable selection between
+  the 48 transmission channels.
+```
+
+The relevant pins on the Nimbus TX (from the hardware JSON):
+
+| Function | GPIO |
+| --- | --- |
+| VRX RSSI ADC | 14 |
+| VRX BBS data | 41 |
+| VRX BBS chip-select | 40 |
+| VRX BBS clock | 39 |
+
+When you click **Scan** in the desktop app, it cycles channel set + frequency over BBS until video appears.
+
+## Binding tweaks
+
+- Default binding phrase set to a DroneForge value so OOB Nimbus units bind without per-unit configuration.
+- New TX command to **set the bind UID** (`add command for setting tx bind uid`), useful for fleet provisioning.
+
+## Flashing fixes
+
+Several robustness changes in the RX/TX flashing path complement the [`firmware-flasher`](/flasher/overview):
+
+- `fix rx flashing`, clean error path when ESP8285 ROM bootloader misbehaves.
+- `add delays when switching channels during scan`, keeps SX1280 in spec across rapid scans.
+- `[linux elrs fix] retry flashing at different baud rates, additional error handling`, pairs with `flasher/simple_usb_upload.py`'s baud-candidate retry.
+
+## Branch layout
+
+```
+ExpressLRS-Fork (Droneforge-Inc)
+├── nimbus/main      ← default branch, cherry-picks + Nimbus features
+├── nimbus/<feature> ← feature branches (e.g. feat/mcu-uid-frame)
+└── master           ← upstream tracking branch
+```
+
+PRs flow into `nimbus/main`. When upstream ELRS lands a relevant change, it is rebased into `master` and merged forward.
+
+## Building from source
+
+PlatformIO drives the build. From the `src/` directory in the fork:
+
+<CodeGroup>
+```bash TX (Nimbus)
+pio run -e Unified_ESP32S3_2400_TX_via_UART --target upload
+# When prompted: DIY ESP32-S3 Nimbus 2.4Ghz TX
+```
+```bash RX (drone side)
+pio run -e Unified_ESP8285_2400_RX_via_BetaflightPassthrough
+# Output: src/.pio/build/Unified_ESP8285_2400_RX_via_BetaflightPassthrough/firmware.bin
+```
+</CodeGroup>
+
+The TX build emits four files (`bootloader.bin`, `partitions.bin`, `boot_app0.bin`, `firmware.bin`) into `src/.pio/build/Unified_ESP32S3_2400_TX_via_UART/`. The RX build emits a single `firmware.bin`.
+
+`firmware-flasher`'s `update.sh` understands these output paths by default. See [Syncing binaries](/flasher/syncing-binaries).

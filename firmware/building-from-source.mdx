@@ -1,0 +1,131 @@
+---
+title: "Building from Source"
+description: "Toolchain setup for building the Nimbus ELRS firmware and the Betaflight FC firmware locally."
+icon: "hammer"
+---
+
+DroneForge ships prebuilt binaries that work end-to-end. The instructions here are for *contributors* to the firmware, or for users who want to compile their own bins (e.g., to add hardware support).
+
+## ExpressLRS fork (Nimbus TX & drone RX)
+
+ExpressLRS uses **PlatformIO**. Install it once:
+
+```bash
+python3 -m pip install --user platformio
+```
+
+Clone the fork and check out the Nimbus branch:
+
+```bash
+git clone https://github.com/Droneforge-Inc/ExpressLRS-Fork.git ExpressLRS
+cd ExpressLRS
+git checkout nimbus/main
+```
+
+### Build the TX
+
+```bash
+cd src
+pio run -e Unified_ESP32S3_2400_TX_via_UART
+```
+
+Outputs live in `src/.pio/build/Unified_ESP32S3_2400_TX_via_UART/`:
+
+| File | Purpose |
+| --- | --- |
+| `bootloader.bin` | ESP32-S3 second-stage bootloader |
+| `partitions.bin` | Partition table |
+| `boot_app0.bin`  | App-select stub |
+| `firmware.bin`   | The Nimbus TX application |
+
+To flash from the same command, append `--target upload` and pick the `DIY ESP32-S3 Nimbus 2.4Ghz TX` hardware option when prompted.
+
+### Build the drone RX
+
+```bash
+cd src
+pio run -e Unified_ESP8285_2400_RX_via_BetaflightPassthrough
+```
+
+Output: `src/.pio/build/Unified_ESP8285_2400_RX_via_BetaflightPassthrough/firmware.bin`. ESP8266-family chips boot from `0x0000`; that single file is the entire image.
+
+## Betaflight fork
+
+Betaflight uses **GNU Make** + the **arm-none-eabi-gcc** toolchain.
+
+### macOS
+
+```bash
+brew tap PX4/px4
+brew install gcc-arm-none-eabi
+brew install dfu-util
+```
+
+### Ubuntu / Debian
+
+```bash
+sudo apt update
+sudo apt install -y gcc-arm-none-eabi dfu-util make ruby
+```
+
+### Build a target
+
+```bash
+git clone https://github.com/Droneforge-Inc/betaflight-fork.git betaflight
+cd betaflight
+git checkout nimbus/main
+
+# pick one:
+make TARGET=STM32G47X_BETAFPVG473
+make TARGET=STM32F7X2_AXISFLYINGF7AIO
+make TARGET=LIONBEE_V2_REVB
+```
+
+Outputs land under `obj/`:
+
+```
+obj/betaflight_4.5.2_STM32G47X_BETAFPVG473.hex
+obj/betaflight_4.5.2_STM32F7X2_AXISFLYINGF7AIO.hex
+obj/betaflight_4.5.2_LIONBEE_V2_REVB.hex
+```
+
+`flash-helper` consumes `.bin` files. Convert with `arm-none-eabi-objcopy`:
+
+```bash
+arm-none-eabi-objcopy -I ihex -O binary obj/betaflight_4.5.2_STM32G47X_BETAFPVG473.hex betafpv.bin
+```
+
+…or just let `firmware-flasher`'s `update.sh` do this for you (it invokes `objcopy` automatically when syncing).
+
+## Checking out a clean tree
+
+The forks pin a recent rebase onto upstream, but if you need to reset:
+
+```bash
+# ELRS
+git checkout nimbus/main
+git fetch origin
+git reset --hard origin/nimbus/main
+
+# Betaflight
+git checkout nimbus/main
+git fetch origin
+git reset --hard origin/nimbus/main
+```
+
+<Warning>
+  `git reset --hard` is destructive. Make sure local changes you care about are stashed or pushed first.
+</Warning>
+
+## Sibling-repo layout for `update.sh`
+
+`firmware-flasher/update.sh` expects this layout by default:
+
+```
+~/code/
+├── ExpressLRS/        ← clone of ExpressLRS-Fork
+├── betaflight/        ← clone of betaflight-fork
+└── firmware-flasher/  ← clone of firmware-flasher
+```
+
+If yours differs, override paths with the flags `--betaflight-dir`, `--expresslrs-dir`, `--nimbus-build-dir`, `--drone-build-dir`. See [Syncing binaries](/flasher/syncing-binaries).
