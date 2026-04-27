@@ -1,0 +1,46 @@
+---
+title: "Community Tab"
+description: "Browse, download, and publish agents others have built."
+icon: "users"
+---
+
+The **Community** tab is the public catalog of Nimbus agents. Browse, fork (download), or publish your own.
+
+## What's there
+
+Each entry in the Community tab is a published agent. Listings include:
+
+- The agent's name and a short description.
+- The author (your DroneForge account).
+- Hardware requirements (which FC variants it expects, which sensors it uses).
+- Vision modes it requires (YOLOv11 / DepthAnything / both / neither).
+- Tags / category (search-and-land, follow, racing, etc.).
+
+## Workflow
+
+<Steps>
+  <Step title="Find an agent">
+    Filter by hardware compatibility, running on a BetaFPV Whoop, you can filter to agents that work with `STM32G47X_BETAFPVG473`.
+  </Step>
+  <Step title="Download">
+    Pulls the agent into your sidebar in the Build tab. From there it's editable like anything you authored, make a copy and modify.
+  </Step>
+  <Step title="Publish your own">
+    From your local agents in the Build tab, click Publish. The app uploads:
+    - The agent's JSON.
+    - Hardware requirements.
+    - Description and tags you provide.
+
+    Demonstrations from the Flight tab are **not** included unless you explicitly add them.
+  </Step>
+</Steps>
+
+## Why community matters
+
+The agent format is small and human-readable. A working Nimbus Map for a task like *"track and land on a person's outstretched hand"* is on the order of a few hundred tokens of expression code. Once one person solves it, anyone with a Nimbus can pull and run it, agents are portable across drones, so a graph that works on a Whoop generally works on an Axis F7 with at most parameter adjustments.
+
+## Etiquette
+
+- **Test before publishing.** Other users will fly your agent. If it has a clear failure mode, document it in the description.
+- **Cite hardware requirements honestly.** An agent that needs optical flow won't work on a drone without the BF fork's Micolink driver. List it.
+- **Don't publish unsafe defaults.** `aux1 = 1800` from tick zero arms the moment Play is pressed. That's fine for an experienced pilot, dangerous for a beginner. Note it in the description.

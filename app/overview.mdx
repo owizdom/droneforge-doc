@@ -1,0 +1,71 @@
+---
+title: "Desktop App Overview"
+description: "The DroneForge desktop app: where you log in, build agents, deploy them, review flights, and share with the community."
+icon: "desktop"
+---
+
+The DroneForge desktop app is the *runtime* for Nimbus. It hosts the agent runtime, the AI vision models, and every screen you'll touch when actually flying.
+
+## Tabs at a glance
+
+<CardGroup cols={2}>
+  <Card title="Build" icon="hammer" href="/app/build-tab">
+    Compose agents, node graph editor, expression blocks, vision-mode toggle.
+  </Card>
+  <Card title="Deploy" icon="play" href="/app/deploy-tab">
+    Live control surface, bind, scan, play / pause an agent, watch telemetry.
+  </Card>
+  <Card title="Flight" icon="chart-line" href="/app/flight-tab">
+    Replay and download past flight logs.
+  </Card>
+  <Card title="Community" icon="users" href="/app/community-tab">
+    Browse and share agents others have built.
+  </Card>
+</CardGroup>
+
+## Sign-in
+
+The app requires an account. The login is fast, under a minute. The reasons it's there:
+
+- **Cross-device persistence**, your agents, runs, and settings follow you across machines and upgrades.
+- **Sharing**, published agents need an owner.
+- **Cloud agent storage**, save, load, and back up agents without local file management.
+
+If you already have an account, signing in drops you directly into the main workspace.
+
+## What's on every screen
+
+Two things are constant regardless of tab:
+
+| Element | Where | Meaning |
+| --- | --- | --- |
+| **Nimbus connection indicator** | Top-right | Green = TX is enumerated and the link is up. Gray = no TX. Yellow = TX present but link down. |
+| **Selected agent name** | Top-left of Build / Deploy | The agent currently loaded into the editor / runtime. |
+
+If the connection indicator is gray, jump to [Flashing the TX](/flasher/flashing-tx), the desktop app expects a flashed Nimbus on a CDC port.
+
+## Hardware auto-discovery
+
+The app polls for connected Nimbus TXs and supported drones automatically. Plug a flashed Nimbus in, and the indicator should turn green within a couple of seconds. Plug a paired drone in (or power it up within link range) and it shows up under the connection indicator.
+
+This was a deliberate UX choice, there's no "select your serial port" step.
+
+## Cloud agent storage
+
+Agents you save while logged in sync to the cloud. The Build tab's left sidebar lists them; the Community tab is the public catalog. You can:
+
+- **Download** an agent file for backup or offline editing.
+- **Save** to push the latest changes to your account.
+- **Publish** (from Community) to share with others.
+
+These three are the only persistence operations you need to think about.
+
+## Mental model: who runs what
+
+| Concern | Lives on |
+| --- | --- |
+| Node-graph editor, expressions, AI inference, agent runtime | **Host** (this app) |
+| Channel transmission, link-state telemetry | **Nimbus TX** |
+| Flight control, optical-flow stabilization, telemetry generation | **Drone (RX + FC)** |
+
+When something feels wrong, ask "what *should* be running this?" and look there.

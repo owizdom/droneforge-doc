@@ -1,0 +1,95 @@
+---
+title: "Build Tab"
+description: "Where you compose agents, left-sidebar agent list, the node graph editor, the build buttons toolbar."
+icon: "hammer"
+---
+
+The **Build** tab is where you create and edit agents. Open the desktop app, sign in, and the Build tab is your main workspace.
+
+## Layout
+
+- **Left sidebar**, your list of agents. Each agent is a saved node graph. Click any to load it into the editor.
+- **Editor**, the canvas. Blocks live here; you connect their outputs/inputs by dragging lines.
+- **Build buttons**, a small toolbar with the four most common actions.
+- **+ button**, adds a new agent and opens it for editing.
+
+If you want to fly a specific agent later, **make sure it's selected in the sidebar before deploying**. The Deploy tab shows whichever agent the Build tab is currently editing.
+
+## Build buttons
+
+Four icons live in the build view's toolbar:
+
+<CardGroup cols={2}>
+  <Card title="Add node" icon="plus">
+    Adds a new building block to the agent. Pick from sensors, math/logic, AI vision, control.
+  </Card>
+  <Card title="Vision modes" icon="eye">
+    Toggles which AI vision models run on the live video. YOLOv11 detection, DepthAnything depth, or both.
+  </Card>
+  <Card title="Download" icon="download">
+    Exports the agent as a file (JSON). Useful for backups or sharing offline.
+  </Card>
+  <Card title="Save" icon="floppy-disk">
+    Writes the latest changes to cloud storage. Make a habit of saving before switching tabs.
+  </Card>
+</CardGroup>
+
+## Composing an agent
+
+The flow is always the same:
+
+<Steps>
+  <Step title="Add blocks">
+    Click **Add node** and pick a block type. Common starting blocks:
+    - A **Vision** block (YOLOv11 or DepthAnything) if your agent needs to see.
+    - One or more **Math** blocks for derived values.
+    - The single **Control** block (every agent must have exactly one).
+  </Step>
+  <Step title="Connect them">
+    Drag from a block's output handle to another block's input handle. The line shows the data flow visually. The downstream block can now reference the upstream value by the input's name.
+  </Step>
+  <Step title="Write expressions">
+    Click into a block and type an expression. The full grammar lives in [Expression syntax](/agents/expression-syntax).
+
+    A control-node block usually has multi-assignment expressions:
+
+    ```text
+    roll = 992
+    pitch = if(target_visible, 1100, 992)
+    yaw = pid(320, target_x, 0.8, 0.0, 0.1, 300)
+    throttle = 200
+    aux1 = 1800
+    aux2 = angle
+    ```
+  </Step>
+  <Step title="Save">
+    Hit the Save button. The agent persists to your account.
+  </Step>
+</Steps>
+
+## Inputs by name
+
+Connections are *named*, when you draw a line into a block's input, the downstream expressions can read that name as a variable. So if you connect a Math block's output named `error` into a Control block, that block's expressions can write `roll = pid(0, error, ...)`.
+
+Names also exist for the standard control outputs (`roll`, `pitch`, `yaw`, `throttle`, `aux1`, `aux2`), the control node accepts assignments to any of them regardless of which port name you use internally.
+
+## Parameters
+
+Each block can expose **parameters**, fields you set in the UI rather than in expressions. Their key names also become variables. So if a vision block has a `confidence_threshold` parameter, you can reference `confidence_threshold` in any downstream block's expression.
+
+This is how DroneForge keeps the expression language compact while still letting agents be highly tunable: anything you'd normally make a constant becomes a UI parameter, and the expression treats it like any other variable.
+
+## Validation
+
+If an expression has a syntax error or references a name that isn't connected, the affected block is marked red. The agent will refuse to deploy until everything compiles.
+
+A list of errors that fail compilation lives in [Expression syntax → Errors](/agents/expression-syntax#errors-that-fail-compilation-or-evaluation).
+
+## When you're stuck
+
+Most agents end up working with this debugging order:
+
+1. **Set everything to neutral** in the control node first (`roll = 992; ...`). Confirm the drone hovers / stays armed.
+2. **Add one input at a time.** Wire a single sensor or vision target through the math block, observe the output in the Deploy tab's live telemetry.
+3. **Tune one number at a time.** PID gains, especially. Start with `kp` only.
+4. **Save often.** The desktop app's autosave is opportunistic, not absolute. The Save button is authoritative.

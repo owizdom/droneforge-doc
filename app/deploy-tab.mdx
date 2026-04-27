@@ -1,0 +1,97 @@
+---
+title: "Deploy Tab"
+description: "The live control surface, agent play/pause, channel monitor, drone profile, video feed."
+icon: "play"
+---
+
+The **Deploy** tab is your live cockpit. Open it whenever you're ready to fly an agent.
+
+## What's on screen
+
+| Element | Location | Purpose |
+| --- | --- | --- |
+| **Selected agent** | Top-left | The agent currently loaded. To change it, head back to the Build tab and pick another. |
+| **Nimbus connection indicator** | Top-right | Green = link healthy. |
+| **Video feed** | Center | The drone's camera, decoded by the host. Black? See [VRX Controls](/app/vrx-controls). |
+| **Four-channel status** | Right pane | Live values of `roll`, `pitch`, `yaw`, `throttle` (and aux). Use to confirm the agent is sending the values you expect. |
+| **Drone profile** | Settings | Mass and KV, set these so physics-aware functions like `acceleration(...)` give correct answers. |
+| **Play / Pause** | Center bottom | Start / stop the active agent. |
+| **VRX Controls** | Side panel | Bind to a drone, scan for video, channel select. See [VRX Controls](/app/vrx-controls). |
+
+## Pre-flight checklist
+
+Before pressing Play:
+
+<Steps>
+  <Step title="Confirm the right agent is selected">
+    The agent name top-left should match the one you intend to fly. If not, switch to Build and click the right one in the sidebar.
+  </Step>
+  <Step title="Verify connection">
+    Nimbus connection indicator must be green. If it isn't, see [Troubleshooting → desktop app doesn't see the Nimbus](/flasher/troubleshooting#the-desktop-app-doesnt-see-the-nimbus-tx).
+  </Step>
+  <Step title="Bind / Scan if needed">
+    First connection to a new drone requires Bind (3× power-cycle the drone) + Scan (cycle 5.8 GHz channels). Once a drone is recognized, both happen automatically on subsequent runs. See [VRX Controls](/app/vrx-controls).
+  </Step>
+  <Step title="Confirm channel sticks">
+    Move the agent's expressions or your fallback transmitter (if any) and watch the four-channel status update. If the values don't change, the link or the agent is wrong.
+  </Step>
+  <Step title="Confirm the drone arms safely">
+    If the agent arms via expression (e.g., `aux1 = 1800`), the drone will arm the moment Play is pressed. **Make sure the agent's `aux1` and `throttle` produce safe values for the moment of arming**, typically `aux1 = 1800` and `throttle = 200` (just above motor-off).
+  </Step>
+  <Step title="Have a kill switch ready">
+    If you have a hardware safety switch or arming override on a backup transmitter, keep it in reach. If not, the **Pause** button is your kill, it stops the agent and the drone reverts to the FC's failsafe.
+  </Step>
+</Steps>
+
+## Playing and pausing
+
+- **Play**, deploys the loaded agent. Channels start being computed every tick and pushed down the link.
+- **Pause**, stops emitting commands. Betaflight's failsafe takes over (drop / cut motors / hover, depending on FC config).
+
+The button labels swap state as the agent runs.
+
+## Drone profile
+
+Found in the Deploy tab's drone settings. Two fields:
+
+| Field | Used by |
+| --- | --- |
+| **Mass** | The `acceleration(...)` function and any physics-aware policy. |
+| **KV** | Same, `acceleration(...)` derives a default `motor_efficiency` from KV / mass. |
+
+Set them once per drone you bind. Saved per drone (keyed by MCU UID, see [df_version](/firmware/versioning) and [MCU UID frame](/firmware/expresslrs#mcu-uid-frame)).
+
+## Live telemetry
+
+Below the channel status, the app surfaces the same telemetry the agent sees:
+
+- Battery voltage / level
+- Attitude (roll/pitch/yaw)
+- Optical-flow + range (when present)
+- VIHO height (when valid)
+- Vision target (when an AI mode is on)
+
+This is the same data the agent's expressions can reference, see [Inputs and variables](/agents/inputs-and-variables). Useful for confirming a `*_valid` flag is actually set when you expect it to be.
+
+## Common gotchas
+
+<AccordionGroup>
+  <Accordion title="The agent runs but the drone doesn't arm">
+    Aux1 may not be high enough, or the FC's arming-disable flags are blocking. From Betaflight Configurator:
+    - Aux1 ≥ 1800 typically arms.
+    - `arming_disable_flags` should be 0 when armed.
+    - Throttle must be at low position when aux1 transitions high.
+  </Accordion>
+
+  <Accordion title="The video is black">
+    See [VRX Controls](/app/vrx-controls). Either the VRX hasn't locked the right channel (Scan), or the drone's video transmitter isn't powered.
+  </Accordion>
+
+  <Accordion title="Channels show but the drone doesn't move">
+    Check `df_version`, if the FC firmware is older than what the app expects, some channel mappings can shift. Re-flash the FC.
+  </Accordion>
+
+  <Accordion title="The agent paused itself with a red error">
+    An expression failed to compile or evaluated `0/0` (or similar). Hop back to Build, look for the red block, fix the expression, save, return to Deploy.
+  </Accordion>
+</AccordionGroup>

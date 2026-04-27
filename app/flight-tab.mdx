@@ -1,0 +1,62 @@
+---
+title: "Flight Tab"
+description: "Telemetry replay and log download from past flights, feed it back into training pipelines."
+icon: "chart-line"
+---
+
+The **Flight** tab is where past flights live. Use it to:
+
+- Review what happened on a flight (telemetry, video, agent state).
+- Download the logs.
+- Use the recorded data to train new policies or debug agent behavior.
+
+## What gets logged
+
+Every Deploy session captures:
+
+- The video feed (host-side, post-decode).
+- All telemetry frames (link, FC, optical-flow, VIHO, etc.).
+- The agent's per-tick output (`roll/pitch/yaw/throttle/aux1/aux2`).
+- The agent's evaluated input values (so you know what the expressions saw).
+- Agent metadata (which agent was deployed, version).
+
+## Downloading logs
+
+Each entry in the Flight tab has a download action. The archive includes:
+
+- Video file (MP4 or similar, host-side codec).
+- Telemetry frames as Parquet (compatible with the [LeRobotDataset](/autonomy/datasets) format).
+- Agent definition (JSON).
+- Per-tick command stream.
+
+This is the **right input format for LeRobot training**. See [Autonomy → Training](/autonomy/training) for how to pipe a flight into `lerobot-train`.
+
+## Replay
+
+Clicking a flight loads it in replay. You see the same screen the Deploy tab showed at the time, scrubbing forward and backward. Use it to:
+
+- Diagnose why an agent did something unexpected.
+- Watch when `*_valid` flags dropped (sensor outage, vision lost target).
+- Verify a tuning change actually changed agent behavior.
+
+## Best practice: name your flights
+
+The Flight tab keeps every flight by default. If you tag flights as you go (the app supports a free-text label), you can:
+
+- Filter by tag when building a training set.
+- Find the "good" demos vs. the "bad" runs without watching them all.
+
+For policy training, you typically want **only** the good demos in the dataset. A simple workflow:
+
+1. Fly the task 20 times, hand-piloted or under a partial agent.
+2. After each run, tag with `good` / `bad` / specific descriptors.
+3. Bulk-download just the `good` runs.
+4. Run `lerobot-train` on them.
+
+See [Autonomy → Datasets](/autonomy/datasets) for the structure expected.
+
+## Privacy and storage
+
+Logs live on your account. They are not shared unless you publish an agent + its demos to the Community. Local downloads are fully under your control.
+
+If you publish a *trained policy* to the Community, you do not have to publish the underlying demonstrations.

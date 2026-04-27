@@ -1,0 +1,65 @@
+---
+title: "VRX Controls (Bind & Scan)"
+description: "How to pair Nimbus to a drone. Bind procedure, Scan across 5.8 GHz channels."
+icon: "satellite-dish"
+---
+
+The **VRX Controls** panel in the Deploy tab is how you connect Nimbus to a specific drone. Two operations: **Bind** (RC link) and **Scan** (video link).
+
+## Bind
+
+Bind pairs the Nimbus TX with the drone's ELRS RX over the 2.4 GHz radio link. Required once per drone (the drone remembers the bind).
+
+<Steps>
+  <Step title="Power-cycle the drone three times">
+    Unplug and re-plug the battery (or unplug/replug USB if on the bench) **three times** in quick succession. The drone's RX LED will blink three short flashes, that's bind mode.
+  </Step>
+  <Step title="Wait for the LED to switch to single flashes">
+    When Nimbus locks onto the drone in bind mode, the RX LED transitions from triple flashes to single steady flashes. That means it's ready to bind.
+  </Step>
+  <Step title="Click Bind">
+    In the desktop app's Deploy tab → VRX Controls → click **Bind**. The drone's LED settles into a steady pattern indicating the link is up.
+  </Step>
+</Steps>
+
+The bind UID and binding phrase are persisted in the RX flash. You don't need to re-bind on subsequent power cycles.
+
+### Default binding phrase
+
+The DroneForge ELRS fork ships a **default binding phrase** so consumer Nimbus + drone pairs work out of the box without per-unit setup. Commit: `change binding phrase`, `setup proper binding phrases`. If you need a custom phrase (e.g., to avoid colliding with a neighbor's link), the TX's `set tx bind uid` command supports it, see [ExpressLRS fork → Binding tweaks](/firmware/expresslrs#binding-tweaks).
+
+## Scan
+
+Scan finds your drone's 5.8 GHz video transmission and locks the host's VRX to it. Required once per drone (or whenever you change VTX channel).
+
+When you click **Scan**, the host:
+
+1. Cycles through the 48 supported VRX channels via the Nimbus TX's BBS bus (pins 39/40/41 from [`DIY S3 Nimbus.json`](/reference/hardware-pinout)).
+2. Watches the live video frame for non-zero content.
+3. Locks on the first channel that delivers a clean frame.
+
+### Why Scan exists
+
+VTXs in the FPV world don't have a standard channel-discovery protocol. Most pilots remember their VTX's channel by hand. Scan does that for you, electronically.
+
+### What if Scan fails
+
+Three usual causes:
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| All channels black | VTX not powered | Plug in / arm. Some VTXs are on only when the drone is armed. |
+| All channels noisy / no clean frame | Antenna issue or strong interference | Move closer; check the Nimbus TX's VRX antenna is seated. |
+| Lock on the wrong channel | Another drone broadcasting on a stronger channel | Power down the other drone, retry. |
+
+## Manual VRX channel select
+
+The Scan flow is automated, but if you know your drone's channel you can also enter it directly. The TX surfaces a **48-channel grid**, six bands of eight channels each, covering the standard FPV bands (A, B, E, F, R) plus the Lowrace (L) band that many micro-Whoop VTXs use.
+
+The Nimbus TX exposes the full grid via the BBS bus; the desktop app surfaces it as a dropdown if you prefer manual selection.
+
+## Re-binding
+
+If you re-flash the RX, the bind state is reset. Run Bind again. The drone's MCU UID does not change across re-flashes (it's burned into the chip), so the desktop app remembers the drone profile (mass, KV, etc.) regardless.
+
+If you re-flash the *TX*, the bind UID is cleared. Re-bind from scratch.
