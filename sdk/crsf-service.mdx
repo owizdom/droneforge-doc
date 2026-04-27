@@ -1,0 +1,73 @@
+---
+title: "droneforge-crsf-service"
+description: "The C++ CRSF service inside the Nimbus SDK, how it shuttles channels and telemetry between the Nimbus TX and the desktop app."
+icon: "cogs"
+---
+
+The `droneforge-crsf-service/` directory inside [`droneforge/nimbus_sdk`](https://github.com/droneforge/nimbus_sdk) implements the **CRSF protocol stack** that the desktop app uses to talk to a Nimbus TX over USB.
+
+## What CRSF is
+
+CRSF (Crossfire / TBS Crossfire Protocol) is the de-facto serial protocol for high-rate RC control. ExpressLRS speaks CRSF natively to the FC, and the Nimbus link encapsulates CRSF frames over its 2.4 GHz wireless layer.
+
+A CRSF frame on the wire:
+
+```
+[ sync (0xC8) | length | type | payload | crc8 ]
+```
+
+Frame types relevant to Nimbus:
+
+| Type | Direction | Purpose |
+| --- | --- | --- |
+| `0x16` (RC_CHANNELS_PACKED) | Host → Nimbus → Drone | The 16 RC channels. |
+| `0x14` (LINK_STATISTICS) | Drone → Nimbus → Host | RSSI, LQ, SNR. |
+| Custom Nimbus frames | Drone → Nimbus → Host | Link-state, MCU UID, OPTRANGE, df_version. See [ExpressLRS fork](/firmware/expresslrs#telemetry-link-state-mcu-uid-optrange-df_version). |
+
+## What the service does
+
+`droneforge-crsf-service`'s responsibilities:
+
+1. **Open** the USB-CDC port the Nimbus TX enumerates as.
+2. **Pack** outgoing channels into RC_CHANNELS_PACKED frames at the agent runtime's rate (≤500 Hz).
+3. **Parse** incoming telemetry frames, both standard CRSF and the Nimbus-specific extensions.
+4. **Dispatch** parsed frames to the agent runtime as named values (`battery_voltage`, `optrange_distance`, etc.).
+5. **Surface link health** (RSSI, LQ, link-state frame) to the connection indicator in the desktop app.
+
+## Why it's a separate service
+
+Three reasons:
+
+- **Real-time scheduling.** CRSF I/O is latency-sensitive. Keeping it in a focused C++ service (with a real-time-friendly buffering strategy) avoids fighting the desktop app's main event loop for time slices.
+- **Reusable from anywhere.** Anything that wants to talk to a Nimbus TX, the desktop app, a Python SDK shim, a custom CLI, can link against the service instead of re-implementing CRSF.
+- **Easier to test.** A standalone C++ binary can be exercised against a Nimbus TX without bringing the entire desktop app online.
+
+## What lives in the directory
+
+The contents of `droneforge-crsf-service/` evolve with the SDK, file names and module boundaries shift as the service is iterated on. Rather than list a snapshot here, refer to the [authoritative source on GitHub](https://github.com/droneforge/nimbus_sdk/tree/main/droneforge-crsf-service). At a high level the directory hosts the CRSF frame parser, the USB-CDC port handler, the frame dispatch glue that surfaces typed values to the agent runtime, and the build/packaging files.
+
+## Building it
+
+The service is C++. From a clone of `nimbus_sdk`:
+
+```bash
+cd droneforge-crsf-service
+# follow the README inside that directory for build steps
+```
+
+Required toolchain: a recent C++17+ compiler (clang or gcc), CMake, libusb / libserialport (or platform-equivalent).
+
+## Custom telemetry frames
+
+The Nimbus-specific frames are documented under:
+
+- [Link-state frame](/firmware/expresslrs#link-state-frame)
+- [MCU-UID frame](/firmware/expresslrs#mcu-uid-frame)
+- [OPTRANGE frame](/firmware/expresslrs#optrange-frame)
+- [df_version frame](/firmware/versioning#wire-format)
+
+The service parses each into a typed struct that the desktop app's agent runtime consumes.
+
+## Scope
+
+This service is concerned with the *radio I/O layer*. It does not run agents, does not host AI models, does not draw UI. Those all live in the desktop app proper. The service is the part you'd reuse if you wanted to write your own application that talks to a Nimbus.

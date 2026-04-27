@@ -1,0 +1,71 @@
+---
+title: "Nimbus SDK Overview"
+description: "The companion SDK to the Nimbus desktop app, what's in droneforge/nimbus_sdk, what its CRSF service does, and how it relates to the Droneforge-Inc org."
+icon: "puzzle-piece"
+---
+
+The Droneforge-Inc GitHub org is *one* of two locations DroneForge publishes code from. The companion is the [`droneforge/nimbus_sdk`](https://github.com/droneforge/nimbus_sdk) repo, the **Official Nimbus SDK**, owned by the `droneforge` user account.
+
+## What's in `nimbus_sdk`
+
+| Path | Purpose |
+| --- | --- |
+| `README.md` | The canonical user guide for the desktop app, login screen, Build / Deploy / Flight / Community tabs, expression syntax, VRX controls. The same content is mirrored in this docs site under [Desktop App](/app/overview) and [Agents](/agents/overview). |
+| `assets/` | Marketing / UI assets shared by the public surface area. |
+| `droneforge-crsf-service/` | The CRSF service that bridges the Nimbus TX (USB-CDC) to the desktop app. C++, see [CRSF service](/sdk/crsf-service). |
+
+The repo's main language is C++. The default branch is `main`. License: see the repo (currently per-file).
+
+## Where it fits
+
+```
+DroneForge desktop app
+        │
+        ▼
+droneforge-crsf-service (in nimbus_sdk)
+        │  ← USB-CDC ↔ CRSF translation
+        ▼
+Nimbus TX (running ExpressLRS-Fork firmware)
+        │  ← 2.4 GHz LoRa link
+        ▼
+Drone RX → Betaflight FC
+```
+
+The CRSF service is the desktop app's *radio I/O layer*. It owns the serial connection to Nimbus, packs CRSF frames, parses telemetry frames (link state, MCU UID, OPTRANGE, df_version), and surfaces them through an in-process API the agent runtime consumes.
+
+## Relationship to the org
+
+| | `Droneforge-Inc` org | `droneforge` user |
+| --- | --- | --- |
+| Firmware (ELRS / BF) | ✅ | ✗ |
+| Flasher | ✅ | ✗ |
+| LeRobot fork | ✅ | ✗ |
+| **Nimbus SDK + CRSF service** | ✗ | ✅ |
+| Public design docs | ✅ (`docs/`) | ✗ |
+
+Treat the two locations as **one product**. The org is the place for firmware-layer concerns; `nimbus_sdk` is the place for desktop-app-layer concerns.
+
+## Versioning
+
+`nimbus_sdk` is versioned independently of the firmware forks and ships releases on its own cadence. The README's UX descriptions track what the latest desktop app version exposes, when the app changes meaningfully, the SDK README is updated alongside it.
+
+## Why two repos
+
+A practical split:
+
+- **Firmware** can land on a different release cadence than the desktop app and SDK. ELRS is on a slow upstream; the SDK iterates fast.
+- **Licenses differ.** ELRS / BF are GPL-3.0 (inherited). LeRobot is Apache-2.0. The SDK is per-file.
+- **Build matrices differ.** Firmware needs PIO / arm-gcc. The SDK is C++ + the desktop app's TS/JS.
+
+A user wanting to "build the firmware" cleanly clones from `Droneforge-Inc`. A user wanting to "extend the desktop app's RC plumbing" cleanly clones from `droneforge/nimbus_sdk`. Each repo is internally consistent.
+
+## Where to start
+
+<CardGroup cols={2}>
+  <Card title="Read the Nimbus SDK README" icon="book-open" href="https://github.com/droneforge/nimbus_sdk">
+    The canonical app + expression-syntax guide. Mirrored here under [Desktop App](/app/overview) and [Agents](/agents/overview).
+  </Card>
+  <Card title="Look at droneforge-crsf-service" icon="cogs" href="/sdk/crsf-service">
+    The CRSF I/O layer that talks to the Nimbus TX.
+  </Card>
+</CardGroup>
