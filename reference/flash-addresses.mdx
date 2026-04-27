@@ -1,0 +1,143 @@
+---
+title: "Flash Address Reference"
+description: "Every flash offset, baud rate, and protocol address used by flash-helper. One table to rule them all."
+icon: "table"
+---
+
+A consolidated reference for the constants in `flasher/simple_usb_upload.py`. Match these against your build-system outputs when bringing up a new variant.
+
+## ESP32-S3 (Nimbus TX)
+
+| File | Address |
+| --- | --- |
+| `bootloader.bin` | `0x0000` |
+| `partitions.bin` | `0x8000` |
+| `boot_app0.bin`  | `0xe000` |
+| `firmware.bin`   | `0x10000` |
+
+Constants in code:
+
+```python
+BOOTLOADER_ADDR_S3 = 0x0000
+PARTITIONS_ADDR    = 0x8000
+APP_SELECT_ADDR    = 0xE000
+TX_FIRMWARE_ADDR   = 0x10000
+```
+
+## ESP32 (classic, not used by Nimbus)
+
+| File | Address |
+| --- | --- |
+| `bootloader.bin` | `0x1000` |
+
+```python
+BOOTLOADER_ADDR = 0x1000
+```
+
+## ESP8266 / ESP8285 (drone RX)
+
+Single-image layout:
+
+| File | Address |
+| --- | --- |
+| `firmware.bin` | `0x0000` |
+
+```python
+RX_FIRMWARE_ADDR = 0x0000
+```
+
+## STM32 (Betaflight FC)
+
+DFU address used by the flasher's `dfu-util` invocation:
+
+| Field | Value |
+| --- | --- |
+| Target address | `0x08000000` |
+| Special suffix | `:leave` |
+
+```python
+FC_DFU_ADDRESS = "0x08000000:leave"
+```
+
+`0x08000000` is the start of STM32 internal flash. The `:leave` suffix instructs `dfu-util` to send a "DFU detach" leave command after download, rebooting the FC into the new firmware.
+
+## Baud rates
+
+| Connection | Baud |
+| --- | --- |
+| Betaflight CLI | `115200` |
+| TX flashing (default) | `460800` |
+| RX flashing direct (default) | `460800` |
+| RX flashing through passthrough (preferred) | `420000` |
+| RX flashing through passthrough (fallback 1) | `230400` |
+| RX flashing through passthrough (fallback 2) | `115200` |
+| Backpack debug (when enabled) | `460800` |
+
+Override any of these with `--baud` on the relevant `flash-helper` invocation.
+
+```python
+FC_CLI_BAUD = 115200
+RX_PASSTHROUGH_BAUD_CANDIDATES = (420000, 230400, 115200)
+```
+
+## Timings
+
+| Operation | Delay |
+| --- | --- |
+| FC bootloader settle (after `bl`) | 1.0 s |
+| FC reboot wait (after DFU leave) | 5.0 s |
+
+```python
+FC_BOOTLOADER_DELAY = 1.0
+FC_REBOOT_DELAY     = 5.0
+```
+
+## CRSF bootloader-reset sequence (RX)
+
+The bytes `flash-helper` sends to drop the RX into bootloader mode (from `flasher/bootloader.py`):
+
+```python
+INIT_SEQ = {
+    "CRSF": [0xEC, 0x04, 0x32, ord("b"), ord("l")],
+    "GHST": [0x89, 0x04, 0x32, ord("b"), ord("l")],
+}
+```
+
+CRC-8 polynomial used to terminate the sequence: `0xD5`.
+
+The full assembled sequence is built by:
+
+```python
+get_init_seq("CRSF", "ESP82")
+```
+
+…which returns `INIT_SEQ["CRSF"]` extended with `"ESP82"` as the key plus the CRC.
+
+## Default firmware filenames
+
+```python
+BOOTLOADER_NAME = "bootloader.bin"
+PARTITIONS_NAME = "partitions.bin"
+APP_SELECT_NAME = "boot_app0.bin"
+FIRMWARE_NAME   = "firmware.bin"
+```
+
+`flash-helper` will look for these names under `<bin-root>/<target>/` first, then `<bin-root>/`. Override individually with `--bootloader`, `--partitions`, `--app-select`, `--firmware`.
+
+## Supported chip values
+
+```python
+CHIPS = ("esp8266", "esp32", "esp32-c3", "esp32-s3")
+```
+
+Default chip selection:
+
+| `--target` | Default chip |
+| --- | --- |
+| `tx` | `esp32-s3` |
+| `rx` | `esp8266` |
+| `fc` | n/a (DFU, not esptool) |
+
+## Source
+
+These constants live in [`flasher/simple_usb_upload.py`](https://github.com/Droneforge-Inc/firmware-flasher/blob/main/flasher/simple_usb_upload.py) and [`flasher/bootloader.py`](https://github.com/Droneforge-Inc/firmware-flasher/blob/main/flasher/bootloader.py). When the flasher updates, this page should be re-synced.

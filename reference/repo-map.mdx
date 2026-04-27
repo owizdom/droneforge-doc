@@ -1,0 +1,109 @@
+---
+title: "Repository Map"
+description: "Every repo DroneForge ships, with default branch, license, and what to clone for what task."
+icon: "sitemap"
+---
+
+A complete map of the DroneForge codebase. When in doubt about *where* a thing lives, this page is the source of truth.
+
+## Droneforge-Inc organization
+
+Everything firmware / flasher / training-related lives here.
+
+### `firmware-flasher`
+
+- **URL:** [github.com/Droneforge-Inc/firmware-flasher](https://github.com/Droneforge-Inc/firmware-flasher)
+- **Default branch:** `main`
+- **Language:** Python
+- **Description:** "repo to store managed firmware binaries (elrs, betaflight etc.)"
+- **What's inside:** `flash-helper` CLI (PyInstaller), `binaries/` (managed ELRS + BF binaries), `update.sh` (sibling-repo sync helper).
+- **Clone for:** flashing a Nimbus + drone, or contributing to the flasher.
+- **Docs:** [Flasher overview](/flasher/overview).
+
+### `ExpressLRS-Fork`
+
+- **URL:** [github.com/Droneforge-Inc/ExpressLRS-Fork](https://github.com/Droneforge-Inc/ExpressLRS-Fork)
+- **Default branch:** `nimbus/main`
+- **Language:** C++
+- **License:** GPL-3.0
+- **Description:** "A fork of ExpressLRS firmware with customizations need for Nimbus"
+- **What's inside:** Nimbus TX hardware target (`DIY S3 Nimbus.json`), 500 Hz "nimbus/df" rate, VRX BBS channel select, custom telemetry frames, `df_version`.
+- **Clone for:** building TX/RX firmware locally, or proposing ELRS-side changes.
+- **Docs:** [ExpressLRS fork](/firmware/expresslrs).
+
+### `betaflight-fork`
+
+- **URL:** [github.com/Droneforge-Inc/betaflight-fork](https://github.com/Droneforge-Inc/betaflight-fork)
+- **Default branch:** `nimbus/main`
+- **Language:** C
+- **License:** GPL-3.0
+- **What's inside:** Betaflight 4.5.x with optical-flow driver (Micolink), OPTRANGE telemetry, FC variants for BetaFPV / Axis F7 / Lionbee, `df_version`.
+- **Clone for:** building FC firmware, or porting Nimbus to a new Betaflight target.
+- **Docs:** [Betaflight fork](/firmware/betaflight).
+
+### `lerobot-fork`
+
+- **URL:** [github.com/Droneforge-Inc/lerobot-fork](https://github.com/Droneforge-Inc/lerobot-fork)
+- **Default branch:** `main`
+- **Language:** Python
+- **License:** Apache-2.0
+- **What's inside:** Hugging Face's LeRobot tracking upstream, with DroneForge pinning + occasional drone-glue layered on.
+- **Clone for:** training policies on Nimbus flight data.
+- **Docs:** [Autonomy overview](/autonomy/overview).
+
+### `docs`
+
+- **URL:** [github.com/Droneforge-Inc/docs](https://github.com/Droneforge-Inc/docs)
+- **Default branch:** `main`
+- **Description:** Public design documents. Currently hosts `expression_rules_v0.2.0.md`.
+- **Clone for:** reference.
+- **Docs:** mirrored at [Expression syntax](/agents/expression-syntax).
+
+## droneforge user account
+
+The companion repo for the desktop app + SDK.
+
+### `nimbus_sdk`
+
+- **URL:** [github.com/droneforge/nimbus_sdk](https://github.com/droneforge/nimbus_sdk)
+- **Default branch:** `main`
+- **Language:** C++
+- **Description:** "The Official Nimbus SDK"
+- **What's inside:** `droneforge-crsf-service/` (CRSF I/O), `assets/`, comprehensive desktop-app README.
+- **Clone for:** building tools that talk to a Nimbus TX, or extending the desktop app's RC plumbing.
+- **Docs:** [SDK overview](/sdk/overview).
+
+## Quick "which repo do I clone for X" table
+
+| Task | Repo |
+| --- | --- |
+| Flash a Nimbus + drone | `firmware-flasher` |
+| Customize the ELRS link | `ExpressLRS-Fork` |
+| Customize the FC firmware | `betaflight-fork` |
+| Train a policy | `lerobot-fork` |
+| Read the canonical expression syntax | `docs` (or this site) |
+| Build something that talks to Nimbus over USB | `nimbus_sdk` |
+
+## Branch conventions
+
+| Repo | Default branch | Convention for features |
+| --- | --- | --- |
+| `firmware-flasher` | `main` | feature branches → PR → `main` |
+| `ExpressLRS-Fork` | `nimbus/main` | `nimbus/<feature>` → PR → `nimbus/main`. `master` tracks upstream. |
+| `betaflight-fork` | `nimbus/main` | Same as ELRS fork. |
+| `lerobot-fork` | `main` | Tracks upstream closely. |
+| `docs` | `main` | direct commits |
+| `nimbus_sdk` | `main` | feature branches → PR → `main` |
+
+## License summary
+
+| Repo | License |
+| --- | --- |
+| `firmware-flasher` | per-file (mostly first-party) |
+| `ExpressLRS-Fork` | GPL-3.0 |
+| `betaflight-fork` | GPL-3.0 |
+| `lerobot-fork` | Apache-2.0 |
+| `docs` | (no SPDX) |
+| `nimbus_sdk` | per-file |
+
+When in doubt, read the LICENSE files in each repo.

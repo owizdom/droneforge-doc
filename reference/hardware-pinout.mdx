@@ -1,0 +1,152 @@
+---
+title: "Nimbus TX Hardware Pinout"
+description: "The complete DIY S3 Nimbus.json pin map, every GPIO and what it drives."
+icon: "circuit-board"
+---
+
+This is the full Nimbus TX hardware definition, reproduced verbatim from [`src/hardware/TX/DIY S3 Nimbus.json`](https://github.com/Droneforge-Inc/ExpressLRS-Fork/blob/nimbus/main/src/hardware/TX/DIY%20S3%20Nimbus.json) on the `nimbus/main` branch of `ExpressLRS-Fork`.
+
+## The JSON
+
+```json
+{
+  "serial_rx": 44,
+  "serial_tx": 43,
+
+  "radio_miso": 9,
+  "radio_mosi": 11,
+  "radio_sck": 12,
+
+  "radio_busy": 6,
+  "radio_dio1": 7,
+  "radio_rst": 4,
+  "radio_nss": 10,
+  "radio_tcxo_en": 5,
+
+  "power_min": 0,
+  "power_high": 0,
+  "power_max": 0,
+  "power_default": 0,
+  "power_control": 0,
+  "power_values": [13],
+
+  "led": 2,
+  "led_rgb_isgrb": false,
+
+  "use_backpack": false,
+  "debug_backpack_baud": 460800,
+  "debug_backpack_rx": 44,
+  "debug_backpack_tx": 43,
+  "passthrough_baud": 115200,
+
+  "use_vtx_channels": true,
+  "vtx_rssi": 14,
+  "vtx_bbs_data": 41,
+  "vtx_bbs_cs": 40,
+  "vtx_bbs_sck": 39
+}
+```
+
+## By function
+
+### MCU ↔ Host serial (USB-CDC)
+
+| Function | GPIO | Notes |
+| --- | --- | --- |
+| `serial_rx` | 44 | UART receive from host. |
+| `serial_tx` | 43 | UART transmit to host. |
+
+These are reused by the optional debug backpack (`use_backpack: false` in stock builds).
+
+### MCU ↔ SX1280 LoRa radio (SPI + control)
+
+| Function | GPIO |
+| --- | --- |
+| `radio_miso` | 9 |
+| `radio_mosi` | 11 |
+| `radio_sck` | 12 |
+| `radio_nss` (chip select) | 10 |
+| `radio_busy` | 6 |
+| `radio_dio1` (interrupt) | 7 |
+| `radio_rst` (reset) | 4 |
+| `radio_tcxo_en` (TCXO enable) | 5 |
+
+**`radio_tcxo_en` is critical.** The SX1280's TCXO oscillator needs explicit power. If you build a clone Nimbus and forget this rail, the link will refuse to lock. Asserting GPIO 5 enables the TCXO.
+
+### Power control
+
+| Field | Value |
+| --- | --- |
+| `power_min` | 0 |
+| `power_high` | 0 |
+| `power_max` | 0 |
+| `power_default` | 0 |
+| `power_control` | 0 |
+| `power_values` | `[13]` |
+
+A single fixed power level. The TX is *not* user-tunable for output power. `13` is the SX1280 driver value the firmware uses.
+
+### Status LED
+
+| Function | GPIO | Notes |
+| --- | --- | --- |
+| `led` | 2 | Mono LED. |
+| `led_rgb_isgrb` | `false` | Not RGB. |
+
+The LED indicates power, link-state, and bind status. Specific blink patterns depend on firmware revision.
+
+### Debug backpack (optional)
+
+| Field | Value |
+| --- | --- |
+| `use_backpack` | `false` |
+| `debug_backpack_baud` | 460800 |
+| `debug_backpack_rx` | 44 |
+| `debug_backpack_tx` | 43 |
+| `passthrough_baud` | 115200 |
+
+The backpack and the host serial share UART pins. Stock builds keep the backpack disabled so the host has exclusive UART access.
+
+### 5.8 GHz VRX (BBS)
+
+| Function | GPIO | Notes |
+| --- | --- | --- |
+| `use_vtx_channels` | `true` | Enables the VRX channel-select code path. |
+| `vtx_rssi` | 14 | ADC input for VRX RSSI. |
+| `vtx_bbs_data` | 41 | BBS data line (SPI MOSI-equivalent). |
+| `vtx_bbs_cs` | 40 | BBS chip select. |
+| `vtx_bbs_sck` | 39 | BBS clock. |
+
+The desktop app's **Scan** button drives these pins to cycle through the 48 supported VRX channels.
+
+## Pin summary table
+
+| GPIO | Function |
+| --- | --- |
+| 2 | Status LED |
+| 4 | `radio_rst` |
+| 5 | `radio_tcxo_en` |
+| 6 | `radio_busy` |
+| 7 | `radio_dio1` |
+| 9 | `radio_miso` |
+| 10 | `radio_nss` |
+| 11 | `radio_mosi` |
+| 12 | `radio_sck` |
+| 14 | VRX RSSI ADC |
+| 39 | VRX BBS SCK |
+| 40 | VRX BBS CS |
+| 41 | VRX BBS DATA |
+| 43 | UART TX (host / backpack) |
+| 44 | UART RX (host / backpack) |
+
+## Building a clone
+
+If you build a custom PCB to this pinout, you will get a working Nimbus TX assuming:
+
+- An ESP32-S3 module (with the right power supply).
+- A SX1280-based 2.4 GHz LoRa module with TCXO routed to GPIO 5.
+- A 48-channel BBS-driven VRX module wired to the BBS pins.
+- A USB-C connector with proper signal routing.
+- The `DIY ESP32-S3 Nimbus 2.4Ghz TX` hardware option selected during PIO build.
+
+DroneForge does not currently publish reference schematics. The JSON above is the canonical pin definition.

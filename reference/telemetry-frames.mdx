@@ -1,0 +1,98 @@
+---
+title: "Telemetry Frames"
+description: "Every telemetry frame the Nimbus link carries, standard CRSF, plus the four Nimbus-specific extensions."
+icon: "wave-pulse"
+---
+
+The Nimbus link encapsulates **CRSF** frames over its 2.4 GHz wireless layer. Standard CRSF frames pass through unchanged; the DroneForge fork adds four custom telemetry frames specific to Nimbus.
+
+## Standard CRSF frames (pass-through)
+
+These are not Nimbus-specific, they are how every CRSF link works. The fork preserves them.
+
+| Frame | Type | Direction | Source |
+| --- | --- | --- | --- |
+| RC channels packed | `0x16` | Host → Drone | Nimbus TX (from agent's roll/pitch/yaw/throttle/aux1) |
+| Link statistics | `0x14` | Drone → Host | ExpressLRS (RSSI, LQ, SNR) |
+| Battery sensor | `0x08` | FC → Host | Betaflight (voltage / current / mAh) |
+| Attitude | `0x1E` | FC → Host | Betaflight (roll/pitch/yaw degrees) |
+| Flight mode | `0x21` | FC → Host | Betaflight (mode string) |
+| GPS | `0x02` | FC → Host | Betaflight (when GPS module present) |
+| Vario | `0x07` | FC → Host | Betaflight (rate of climb). DroneForge fork enables this. |
+
+## Nimbus-specific frames
+
+Added by the [`ExpressLRS-Fork`](https://github.com/Droneforge-Inc/ExpressLRS-Fork) and [`betaflight-fork`](https://github.com/Droneforge-Inc/betaflight-fork) on the `nimbus/main` branches.
+
+### Link-state frame
+
+| Field | Description |
+| --- | --- |
+| `link_quality` | LQ as % |
+| `rssi_a`, `rssi_b` | RSSI on antennas A and B |
+| `noise_floor` | Receiver noise estimate |
+| `snr` | Signal-to-noise ratio |
+| `link_state` | One of: `idle`, `connected`, `lost`, `binding` |
+
+Surfaces in the agent runtime as link diagnostic indicators in the Deploy tab. Source commit: [`add telemetry frame representing state of radio link (#4)`](https://github.com/Droneforge-Inc/ExpressLRS-Fork/pull/4).
+
+### MCU-UID frame
+
+| Field | Description |
+| --- | --- |
+| `mcu_uid` | 6-byte ESP8285 unique ID, hex-encoded |
+
+Sent once on each RX power-up. The desktop app uses it to identify a specific drone and re-attach saved settings (mass, KV) on subsequent connections. Source commit: [`feat/mcu-uid-frame`](https://github.com/Droneforge-Inc/ExpressLRS-Fork/pull/7).
+
+### OPTRANGE frame
+
+| Field | Description | Agent variable |
+| --- | --- | --- |
+| `distance` | Optical-range sensor distance | `optrange_distance` |
+| `vel_x`, `vel_y` | Optical-flow XY velocity | `optrange_velX`, `optrange_velY` |
+| `vz_measured` | Sensor-measured vertical velocity | `optrange_vz_measured` |
+| `valid` | Validity flag | `optrange_valid` |
+
+Originates in the Betaflight fork's Micolink-protocol optical-flow driver, forwarded over CRSF. See [Betaflight fork → OPTRANGE](/firmware/betaflight#optrange-telemetry-frame).
+
+### `df_version` frame
+
+| Field | Description |
+| --- | --- |
+| `hw_major`, `hw_minor` | Hardware version. |
+| `fw_major`, `fw_minor`, `fw_patch` | Firmware version. |
+
+Sent by both the ELRS RX and the Betaflight FC. The desktop app reads both and verifies they match the version it was built against. Source commit: [`add custom versioning for hardware and firmware (#5)`](https://github.com/Droneforge-Inc/ExpressLRS-Fork/pull/5), [`Feat/df version (#6)`](https://github.com/Droneforge-Inc/betaflight-fork/pull/6).
+
+## Frame ID space
+
+Standard CRSF frame IDs occupy a published range. Nimbus-specific frames use IDs in a vendor-extension range agreed with the desktop app's CRSF parser. Exact IDs are subject to change as DroneForge bumps `df_version`; check the source for current values.
+
+## How frames flow
+
+```
+                 ┌─── (FC-side telemetry: BF) ───┐
+                 │  battery, attitude, flight    │
+                 │  mode, vario, df_version,     │
+                 │  OPTRANGE                     │
+                 ▼                                │
+[Drone RX (ESP8285)]                              │
+   │                                              │
+   │ link telemetry, MCU UID, df_version (RX-side)│
+   ▼                                              │
+[ELRS over 2.4 GHz]──┐                            │
+                     ▼                            │
+              [Nimbus TX (ESP32-S3)]              │
+                     │                            │
+                     │ CRSF over USB-CDC          │
+                     ▼                            │
+              [Host: droneforge-crsf-service]     │
+                     │                            │
+                     ▼                            │
+              [Desktop app agent runtime]         │
+                                                  │
+                  (read in expressions  ◀─────────┘
+                   as the *_valid pairs above)
+```
+
+`droneforge-crsf-service` (in [`droneforge/nimbus_sdk`](https://github.com/droneforge/nimbus_sdk)) is the parser that turns these frames into agent-readable variables. See [SDK → CRSF service](/sdk/crsf-service).
