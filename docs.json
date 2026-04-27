@@ -1,0 +1,228 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "DroneForge",
+  "description": "Full-Self-Driving for Drones. Plug-and-play autonomy that adapts to your drone and use case.",
+  "colors": {
+    "primary": "#00FF00",
+    "light": "#7DFF4F",
+    "dark": "#00CC00"
+  },
+  "background": {
+    "color": {
+      "dark": "#000000",
+      "light": "#FFFFFF"
+    },
+    "decoration": "grid"
+  },
+  "appearance": {
+    "default": "dark",
+    "strict": false
+  },
+  "styling": {
+    "eyebrows": "section",
+    "codeblocks": "dark"
+  },
+  "fonts": {
+    "heading": {
+      "family": "Bai Jamjuree",
+      "weight": 700,
+      "source": "https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@300;400;500;600;700&display=swap",
+      "format": "woff2"
+    },
+    "body": {
+      "family": "Bai Jamjuree",
+      "weight": 400,
+      "source": "https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@300;400;500;600;700&display=swap",
+      "format": "woff2"
+    }
+  },
+  "favicon": "/favicon.svg",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg",
+    "href": "https://thedroneforge.com"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "safety"
+            ]
+          },
+          {
+            "group": "Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/full-self-driving",
+              "concepts/nimbus-link"
+            ]
+          },
+          {
+            "group": "Build agents",
+            "pages": [
+              "agents/overview",
+              "agents/examples",
+              "agents/ai-vision",
+              "app/overview",
+              "app/build-tab",
+              "app/deploy-tab",
+              "app/flight-tab",
+              "app/community-tab",
+              "app/vrx-controls"
+            ]
+          },
+          {
+            "group": "Train policies",
+            "pages": [
+              "autonomy/overview",
+              "autonomy/policies",
+              "autonomy/datasets",
+              "autonomy/training"
+            ]
+          },
+          {
+            "group": "Resources",
+            "pages": [
+              "resources/faq",
+              "resources/contributing",
+              "resources/upstream-projects",
+              "resources/license-and-credits",
+              "changelog"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Hardware",
+            "pages": [
+              "hardware/overview",
+              "hardware/nimbus-tx",
+              "hardware/drone-rx",
+              "hardware/flight-controllers",
+              "reference/hardware-pinout"
+            ]
+          },
+          {
+            "group": "Firmware",
+            "pages": [
+              "firmware/overview",
+              "firmware/expresslrs",
+              "firmware/betaflight",
+              "firmware/versioning",
+              "firmware/building-from-source"
+            ]
+          },
+          {
+            "group": "Flasher",
+            "pages": [
+              "flasher/overview",
+              "flasher/install",
+              "flasher/flashing-tx",
+              "flasher/flashing-rx",
+              "flasher/flashing-fc",
+              "flasher/syncing-binaries",
+              "flasher/cli-reference",
+              "flasher/troubleshooting",
+              "reference/flash-addresses"
+            ]
+          },
+          {
+            "group": "Expression language",
+            "pages": [
+              "agents/expression-syntax",
+              "agents/control-outputs",
+              "agents/inputs-and-variables",
+              "agents/functions"
+            ]
+          },
+          {
+            "group": "SDK & frames",
+            "pages": [
+              "sdk/overview",
+              "sdk/crsf-service",
+              "reference/telemetry-frames",
+              "reference/repo-map",
+              "resources/glossary"
+            ]
+          }
+        ]
+      }
+    ],
+    "global": {
+      "anchors": [
+        {
+          "anchor": "GitHub",
+          "href": "https://github.com/Droneforge-Inc",
+          "icon": "github"
+        },
+        {
+          "anchor": "Nimbus SDK",
+          "href": "https://github.com/droneforge/nimbus_sdk",
+          "icon": "code"
+        },
+        {
+          "anchor": "Website",
+          "href": "https://thedroneforge.com",
+          "icon": "globe"
+        },
+        {
+          "anchor": "X",
+          "href": "https://x.com/thedroneforge",
+          "icon": "x-twitter"
+        }
+      ]
+    }
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/Droneforge-Inc"
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "x": "https://x.com/thedroneforge",
+      "github": "https://github.com/Droneforge-Inc"
+    },
+    "links": [
+      {
+        "header": "PRODUCT",
+        "items": [
+          { "label": "Nimbus", "href": "https://thedroneforge.com" },
+          { "label": "Nimbus SDK", "href": "https://github.com/droneforge/nimbus_sdk" }
+        ]
+      },
+      {
+        "header": "OPEN SOURCE",
+        "items": [
+          { "label": "firmware-flasher", "href": "https://github.com/Droneforge-Inc/firmware-flasher" },
+          { "label": "ExpressLRS-Fork", "href": "https://github.com/Droneforge-Inc/ExpressLRS-Fork" },
+          { "label": "betaflight-fork", "href": "https://github.com/Droneforge-Inc/betaflight-fork" },
+          { "label": "lerobot-fork", "href": "https://github.com/Droneforge-Inc/lerobot-fork" }
+        ]
+      }
+    ]
+  },
+  "seo": {
+    "metatags": {
+      "og:site_name": "DroneForge Docs",
+      "og:type": "website"
+    },
+    "indexing": "all"
+  },
+  "search": {
+    "prompt": "SEARCH NIMBUS DOCS"
+  }
+}

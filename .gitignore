@@ -1,0 +1,7 @@
+.DS_Store
+.mintlify/
+.mint/
+node_modules/
+*.log
+.vscode/
+.idea/
