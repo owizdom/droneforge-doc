@@ -1,0 +1,130 @@
+---
+title: "Policy Choices"
+description: "Imitation learning, reinforcement learning, and Vision-Language-Action models, what LeRobot ships and which to pick for a drone task."
+icon: "brain"
+---
+
+LeRobot implements state-of-the-art policies in pure PyTorch across three families:
+
+<CardGroup cols={3}>
+  <Card title="Imitation Learning" icon="graduation-cap">
+    **ACT, Diffusion Policy, VQ-BeT.** Train from demos.
+  </Card>
+  <Card title="Reinforcement Learning" icon="trophy">
+    **HIL-SERL, TDMPC** (QC-FQL coming). Train from interaction.
+  </Card>
+  <Card title="VLA Models" icon="comments">
+    **Pi0, Pi0.5, SmolVLA, GR00T N1.5, XVLA.** Vision-language-action, natural-language conditioning.
+  </Card>
+</CardGroup>
+
+For Nimbus drone tasks, **imitation learning + VLA** is the practical sweet spot. RL is excellent in simulation but harder to set up safely on a flying robot.
+
+## Imitation learning
+
+You demonstrate the task; the policy learns to mimic.
+
+### ACT (Action Chunking Transformer)
+
+[Original LeRobot doc](https://github.com/huggingface/lerobot/blob/main/docs/source/policy_act_README.md)
+
+ACT predicts a *chunk* of future actions per input observation, smoothing out noisy single-step predictions. Strong default for short, repeatable tasks.
+
+When to pick ACT:
+- You have 50–200 demonstrations of the same maneuver.
+- The task has a clear start state and end state.
+- You want fast convergence (minutes to an hour on a single GPU).
+
+```bash
+lerobot-train --policy=act --dataset.repo_id=droneforge/find-and-land
+```
+
+### Diffusion Policy
+
+[Original LeRobot doc](https://github.com/huggingface/lerobot/blob/main/docs/source/policy_diffusion_README.md)
+
+Models the action distribution as a denoising-diffusion process. Excellent at multimodal behaviors (more than one valid action at the same state).
+
+When to pick Diffusion:
+- The task admits multiple valid solutions (e.g., orbit clockwise *or* counter-clockwise are both fine).
+- You have ~200+ demos.
+
+```bash
+lerobot-train --policy=diffusion --dataset.repo_id=droneforge/orbit-around
+```
+
+### VQ-BeT
+
+[Original LeRobot doc](https://github.com/huggingface/lerobot/blob/main/docs/source/policy_vqbet_README.md)
+
+Vector-quantized behavior transformer. Small, fast, surprisingly capable.
+
+## Reinforcement learning
+
+LeRobot ships **HIL-SERL** (human-in-the-loop SAC for real-robot RL) and **TDMPC** (TD-MPC2). For drone work, both are research-grade, useful if you can train in simulation and bridge sim-to-real, less useful as a turnkey solution.
+
+LeRobot supports the **LIBERO** and **MetaWorld** benchmarks for evaluating policies in simulation; drone-specific benchmarks are not yet first-class but are on the roadmap.
+
+## Vision-Language-Action models
+
+VLA models accept *natural-language goals* alongside vision. Game-changing for Nimbus's "say what you want" UX.
+
+### Pi0 / Pi0.5
+
+[Pi0Fast doc](https://github.com/huggingface/lerobot/blob/main/docs/source/pi0fast.mdx) · [Pi0.5 doc](https://github.com/huggingface/lerobot/blob/main/docs/source/pi05.mdx)
+
+Pi0 is a flow-matching VLA from Physical Intelligence. Pi0.5 is the latest release. Capable of multi-task control with language conditioning.
+
+When to pick Pi0/0.5:
+- Task is naturally language-described ("find the bike and land", "follow the person in red").
+- You're willing to either fine-tune on Nimbus demos or use a pretrained checkpoint.
+
+### SmolVLA
+
+[SmolVLA doc](https://github.com/huggingface/lerobot/blob/main/docs/source/policy_smolvla_README.md)
+
+A small (≤2B param) VLA designed to fit on consumer hardware. Excellent for Nimbus, the host is typically a laptop, not a server.
+
+```bash
+lerobot-train --policy=smolvla --dataset.repo_id=droneforge/multi-task-set
+```
+
+### GR00T N1.5
+
+[GR00T doc](https://github.com/huggingface/lerobot/blob/main/docs/source/policy_groot_README.md)
+
+NVIDIA's GR00T humanoid foundation model, ported in. Heavyweight; mostly relevant if you have data spanning many embodiments.
+
+### XVLA
+
+[XVLA doc](https://github.com/huggingface/lerobot/blob/main/docs/source/xvla.mdx)
+
+Cross-embodiment VLA. Train on data from many robots; use on yours.
+
+## Decision tree
+
+| You have… | Pick |
+| --- | --- |
+| 50–200 single-task demos, want fast results | **ACT** |
+| Many demos, multimodal behaviors | **Diffusion** |
+| Demos + natural-language conditioning | **SmolVLA** (start), **Pi0/Pi0.5** (scale up) |
+| Sim environment, willing to RL | **HIL-SERL**, **TDMPC** |
+| Lots of compute and a multi-task corpus | **GR00T**, **XVLA** |
+
+## Evaluation
+
+LeRobot's unified evaluation:
+
+```bash
+lerobot-eval \
+  --policy.path=lerobot/pi0_libero_finetuned \
+  --env.type=libero \
+  --env.task=libero_object \
+  --eval.n_episodes=10
+```
+
+For Nimbus, evaluation typically means *real flight*, not simulation. The Flight tab logs become your eval metric set: how often does the agent complete the task?
+
+## Bringing your own policy
+
+LeRobot is designed to be extensible. To plug a new policy in, implement the LeRobot policy interface and register it. Then the same `lerobot-train` and the same Nimbus Map "Policy" node work with it. See the [upstream Bring-Your-Own-Policy doc](https://github.com/huggingface/lerobot/blob/main/docs/source/bring_your_own_policies.md).

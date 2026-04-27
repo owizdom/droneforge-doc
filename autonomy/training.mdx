@@ -1,0 +1,135 @@
+---
+title: "Training a Policy"
+description: "End-to-end walkthrough, record demos, convert to LeRobotDataset, train, deploy on Nimbus."
+icon: "dumbbell"
+---
+
+This walkthrough trains an ACT policy on a Nimbus task and deploys the checkpoint as a Nimbus Map node. The same flow works for Diffusion, SmolVLA, etc., just swap the `--policy` flag.
+
+## Prerequisites
+
+<CardGroup cols={2}>
+  <Card title="A working Nimbus + drone" icon="microchip">
+    Flashed, bound, capable of flying agents (you've completed [Quickstart](/quickstart)).
+  </Card>
+  <Card title="A workstation with a GPU" icon="server">
+    Anything with ≥8 GB VRAM works for ACT. SmolVLA wants ≥16 GB. Pi0 / GR00T want a beefy A/H-class GPU.
+  </Card>
+</CardGroup>
+
+Install LeRobot from the fork:
+
+```bash
+git clone https://github.com/Droneforge-Inc/lerobot-fork
+cd lerobot-fork
+pip install -e .
+lerobot-info  # smoke test
+```
+
+## Step 1. Record demonstrations
+
+Pick a task. *Find-and-land* is a good first target: visible target, clear terminal state.
+
+In the Nimbus desktop app:
+
+1. Build a *partial* agent, vision target tracking, but you control throttle/pitch via stick.
+2. Fly the task 50–100 times. Tag each run `find-and-land:good` or `:bad`.
+3. From the Flight tab, bulk-download the `:good` runs.
+
+You now have 50–100 archives, each with video + telemetry + commands.
+
+## Step 2. Convert to LeRobotDataset
+
+The Nimbus desktop app exports flight archives in a layout that maps cleanly to the LeRobotDataset schema:
+
+| Nimbus log artifact | LeRobotDataset field |
+| --- | --- |
+| `flight.mp4` | `observation.image` |
+| `flight.parquet` (state + action stream) | `observation.state` + `action` |
+| `agent.json`, flight tags | `task` (per episode) |
+
+Conversion is a small Parquet schema mapping. There is no first-party `lerobot-convert` CLI for Nimbus flights yet, write your conversion in Python using `LeRobotDataset.create()` from the upstream API. The [LeRobot dataset tools](https://huggingface.co/docs/lerobot/lerobot-dataset-v3) page documents the exact field types and the episode-boundary contract.
+
+Once converted, push to the Hub:
+
+```bash
+huggingface-cli login
+# Inside Python, after building a LeRobotDataset:
+# dataset.push_to_hub("droneforge/find-and-land")
+```
+
+## Step 3. Train
+
+```bash
+lerobot-train \
+  --policy=act \
+  --dataset.repo_id=droneforge/find-and-land \
+  --output_dir=./outputs/act_findland_v1
+```
+
+Watch the loss curve. ACT typically converges in 30–60 minutes on a single GPU for a few hundred demos. Useful flags:
+
+| Flag | Effect |
+| --- | --- |
+| `--training.num_steps` | Training horizon. Default is sane; bump for more polish. |
+| `--training.batch_size` | Defaults to 32. Smaller if VRAM-tight. |
+| `--policy.chunk_size` | Action-chunk length. ACT default is 100; for 500 Hz Nimbus links you may want 50. |
+
+The output directory contains checkpoints (`step_NNNN.pt`), config, and tensorboard logs.
+
+## Step 4. Evaluate
+
+LeRobot's evaluation runs the policy in a simulator. There's no first-class drone simulator yet; for Nimbus, **real flight is the eval**.
+
+Push the checkpoint to the desktop app:
+
+1. From the Build tab, add a Policy node.
+2. Point it at the checkpoint path (`./outputs/act_findland_v1/checkpoints/last.pt`).
+3. Wire its action output into the control node:
+
+   ```text
+   roll = policy.action[0]
+   pitch = policy.action[1]
+   yaw = policy.action[2]
+   throttle = policy.action[3]
+   aux1 = 1800
+   aux2 = angle
+   ```
+
+(Substitute `policy` with the actual block name in your graph.)
+
+## Step 5. Deploy and iterate
+
+In the Deploy tab:
+
+- Press Play.
+- Watch the Flight tab for new recordings.
+- Tag each as `success` or `failure`.
+
+Two iteration patterns:
+
+| Pattern | When to use |
+| --- | --- |
+| **Add demos** | Failures cluster around a particular state the dataset under-covers. Record more demos in that regime. |
+| **Switch policies** | The current architecture struggles. Try Diffusion (multimodal), or SmolVLA (language conditioning). |
+
+## Tips
+
+- **Start with ACT.** It converges fast and gives a fair baseline. Move to Diffusion / VLAs once ACT is the bottleneck.
+- **Down-sample the action chunk.** 500 Hz × 100-step chunks is a lot. 50 Hz, 50-step chunks (effectively 1 second of action) often work fine for slow tasks like search-and-land.
+- **Keep failure demos around.** They're useful for diagnostics later, bulk-tag them, exclude from training, but don't delete.
+- **Use the `task` field aggressively.** Many small datasets each tagged with their task often beats one giant unlabeled dump for VLA training.
+
+## Bringing in a pretrained policy
+
+If you don't want to train from scratch, you can fine-tune from a published checkpoint:
+
+```bash
+lerobot-train \
+  --policy=smolvla \
+  --policy.pretrained_path=lerobot/smolvla_pretrained \
+  --dataset.repo_id=droneforge/find-and-land \
+  --training.num_steps=5000
+```
+
+Fine-tuning a VLA from a pretrained head needs ~10× fewer demos than training from scratch.

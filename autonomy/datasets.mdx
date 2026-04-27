@@ -1,0 +1,86 @@
+---
+title: "Datasets (LeRobotDataset format)"
+description: "How Nimbus flight logs map to LeRobotDataset. Parquet for state/action, MP4 for vision, episode boundaries, tasks."
+icon: "database"
+---
+
+`LeRobotDataset` is LeRobot's standardized format for robotics data. It's:
+
+- **Parquet** files for state and action streams (efficient, columnar, streamable from the Hugging Face Hub).
+- **MP4** (or images) for vision.
+- A small JSON manifest tying them together.
+
+Nimbus flight logs are designed to convert into this format with minimal friction.
+
+## Why this format
+
+Robotics datasets are usually a mess. Each lab invents its own layout, sync between cameras and state is fragile, and sharing across teams is brutal. LeRobotDataset standardizes:
+
+- **Synchronization**, each row in the Parquet file references the matching frame in the MP4.
+- **Streaming**. Parquet + MP4 stream from disk or network without loading everything.
+- **Hub integration**, push to Hugging Face Hub with one command, share a URL.
+- **Tooling**, split, merge, modify episodes / tasks / features without rewriting from scratch.
+
+## Reading a dataset
+
+```python
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
+
+dataset = LeRobotDataset("lerobot/aloha_mobile_cabinet")
+print(dataset[0]['action'].shape)
+# Video frames are auto-decoded.
+```
+
+The same code works for any Nimbus-recorded dataset once converted.
+
+## Mapping Nimbus flights to LeRobotDataset
+
+Each Flight tab recording has:
+
+| Nimbus log | LeRobotDataset field |
+| --- | --- |
+| Per-tick `roll/pitch/yaw/throttle/aux1` | `action` (5-dim) |
+| Per-tick observations (attitude, optical flow, target_*, nav_*, …) | `observation.state` (vector) |
+| Video frames | `observation.image` (MP4) |
+| Agent metadata, tags | `task` (string per episode) |
+| Boundaries between Deploy sessions | episode index |
+
+A small conversion script (provided in the Nimbus desktop app's export, or as a recipe in `lerobot-fork/examples/`) handles the mechanical translation.
+
+## Tasks
+
+LeRobot's dataset model recognizes that the same robot can do many tasks. Each episode carries a `task` label. With Nimbus flight tags from the Flight tab, you can:
+
+- Mark some flights `find-and-land`, others `orbit`, others `follow`.
+- Train one VLA on the union, the policy learns to condition on the task label.
+
+LeRobot ships utilities to bulk-modify tasks in-place (`lerobot_edit_dataset --modify-tasks ...`), recent upstream addition mirrored in the fork. See the latest commit `Feat(dataset_tools.py) Add modify tasks tool (#2875)` in `lerobot-fork`.
+
+## Splitting and merging
+
+Three operations cover most needs:
+
+```python
+# Split by index
+train, val = dataset.split_by_index([0, 100, 200], [80, 20, 20])
+
+# Merge multiple datasets
+big = LeRobotDataset.merge(["droneforge/find-and-land", "droneforge/orbit"])
+
+# Delete a bad episode
+dataset.delete_episode(42)
+```
+
+All of these are first-class in upstream and pulled into the fork.
+
+## Pushing to the Hub
+
+```python
+dataset.push_to_hub("droneforge/find-and-land")
+```
+
+This makes it accessible to anyone with a Hugging Face account, ready for `lerobot-train --dataset.repo_id=droneforge/find-and-land`.
+
+## Privacy
+
+Nothing about a Nimbus flight goes online unless you explicitly push the dataset. The Flight tab stores everything locally to your account; conversion + Hub push is opt-in.

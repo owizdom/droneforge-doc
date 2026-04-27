@@ -1,0 +1,109 @@
+---
+title: "Autonomy Overview"
+description: "Why DroneForge maintains a fork of Hugging Face's LeRobot, what it gives you, and how trained policies fit into Nimbus agents."
+icon: "brain-circuit"
+---
+
+[`Droneforge-Inc/lerobot-fork`](https://github.com/Droneforge-Inc/lerobot-fork) is DroneForge's fork of Hugging Face's [LeRobot](https://github.com/huggingface/lerobot), a Python-native, hardware-agnostic robotics library. It's the *training* side of the Nimbus story.
+
+## What LeRobot gives Nimbus
+
+Three things, in order of importance to Nimbus:
+
+<CardGroup cols={3}>
+  <Card title="A standard dataset format" icon="database" href="/autonomy/datasets">
+    `LeRobotDataset` (Parquet + MP4) handles synchronization between video and state/action streams. Flight logs from Nimbus map cleanly into this format.
+  </Card>
+  <Card title="State-of-the-art policies" icon="brain" href="/autonomy/policies">
+    Pure-PyTorch implementations of ACT, Diffusion Policy, VQ-BeT, Pi0 / Pi0.5, SmolVLA, GR00T N1.5, HIL-SERL, TDMPC. Fork keeps them runnable inside the Nimbus pipeline.
+  </Card>
+  <Card title="A unified Robot interface" icon="robot">
+    Decouples control logic from hardware specifics. The same dataset format and training loops that work for SO-100 / LeKiwi / HopeJR are the substrate Nimbus drone training plugs into.
+  </Card>
+</CardGroup>
+
+## Why fork it
+
+LeRobot evolves quickly, new policies and refactors land weekly. The fork lets DroneForge:
+
+- **Pin a known-good commit per Nimbus release.** The desktop app expects a specific dataset schema and policy interface; pinning prevents *upstream churn from breaking the runtime*.
+- **Add Nimbus glue locally** when needed, without waiting on upstream review. (Most additions are merged upstream eventually, the fork is a staging area, not a divergence.)
+- **Re-merge upstream periodically** when bigger changes settle.
+
+The repo's commit history closely mirrors upstream, with DroneForge's customizations layered on top.
+
+## What's the same as upstream
+
+Almost everything. The library's core contracts:
+
+```python
+from lerobot.robots.myrobot import MyRobot
+
+robot = MyRobot(config=...)
+robot.connect()
+
+obs = robot.get_observation()
+action = model.select_action(obs)
+robot.send_action(action)
+```
+
+…work identically.
+
+So do dataset operations:
+
+```python
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
+
+dataset = LeRobotDataset("droneforge/your-flight-set")
+print(dataset[0]['action'].shape)
+```
+
+…and the CLI entrypoints (`lerobot-train`, `lerobot-eval`, `lerobot-info`).
+
+If you've used upstream LeRobot, you've used 99% of `lerobot-fork`.
+
+## How a trained policy gets onto Nimbus
+
+The end-to-end loop:
+
+<Steps>
+  <Step title="Record demonstrations">
+    Fly the task in the Nimbus desktop app. Each Deploy session lands in the Flight tab as a recording. See [Flight Tab](/app/flight-tab).
+  </Step>
+  <Step title="Convert to LeRobotDataset">
+    Bulk-download good runs and run a small conversion script that emits a `LeRobotDataset` (Parquet + MP4 layout). See [Datasets](/autonomy/datasets).
+  </Step>
+  <Step title="Train">
+    ```bash
+    lerobot-train --policy=act --dataset.repo_id=droneforge/your-flight-set
+    ```
+
+    Pick the right policy class for your task, see [Policies](/autonomy/policies).
+  </Step>
+  <Step title="Export a checkpoint">
+    `lerobot-train` writes checkpoints. You publish or upload one to be loaded as a node in the desktop app.
+  </Step>
+  <Step title="Use as a Nimbus Map node">
+    In the Build tab, add a Policy node and point it at the checkpoint. The policy's outputs are routed to the control node like any other input, the same `roll = ...; pitch = ...` assignments that work for hand-coded agents.
+  </Step>
+</Steps>
+
+## A note on what this is not
+
+LeRobot is **off-board** training. You don't run `lerobot-train` on the drone; you run it on a workstation with a GPU. The policy *runs* on the host (the desktop app), and only sends `roll/pitch/yaw/throttle/aux1` down the link.
+
+This is the architectural choice that makes Nimbus's "FSD on a $100 drone" claim feasible: the drone never has to carry a Jetson, never has to run inference, never has to host a Python interpreter. It's a thin actuator.
+
+## Next steps
+
+<CardGroup cols={3}>
+  <Card title="Dataset format" icon="database" href="/autonomy/datasets">
+    The Parquet + MP4 layout, how Nimbus flight logs map to it.
+  </Card>
+  <Card title="Policy choices" icon="brain" href="/autonomy/policies">
+    ACT vs Diffusion vs Pi0, which to pick.
+  </Card>
+  <Card title="Training" icon="dumbbell" href="/autonomy/training">
+    `lerobot-train` walkthrough.
+  </Card>
+</CardGroup>
