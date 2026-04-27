@@ -1,0 +1,121 @@
+---
+title: "Expression Syntax (v0.2.0)"
+description: "The full grammar of the Nimbus expression language, values, operators, functions, control outputs, errors. Reproduced from the canonical spec in Droneforge-Inc/docs."
+icon: "code"
+---
+
+Every block in a Nimbus agent contains expressions. Expressions are small statements that read inputs and produce outputs. The language is intentionally compact, there are no loops, no functions you can define, no variables of your own. What you have, you have.
+
+This page is the **canonical syntax reference**, mirroring the [`expression_rules_v0.2.0.md`](https://github.com/Droneforge-Inc/docs/blob/main/expression_rules_v0.2.0.md) source.
+
+## Values
+
+| Type | Example(s) | Notes |
+| --- | --- | --- |
+| **Numbers** | `1`, `3.14`, `-2`, `1e-3` | Standard numeric formats. |
+| **Constants** | `pi`, `PI` | Case-insensitive. |
+| **Variables** | `throttle`, `roll`, `aux1` | Any parameter from the node's parameter map (see [Inputs and variables](/agents/inputs-and-variables)). |
+| **Special var** | `time` | Runtime seconds since the agent started. |
+
+## Operators
+
+| Category | Symbols | Notes |
+| --- | --- | --- |
+| **Arithmetic** | `+ - * /` | Use parentheses to group. |
+| **Comparisons** | `< > <= >= == !=` | Return `1.0` (true) / `0.0` (false). |
+| **Logical** | `&&`, `\|\|` | Non-zero is true. |
+| **Precedence** | Standard math rules | Use parentheses to group. |
+
+## Functions (summary)
+
+| Category | Functions | Notes |
+| --- | --- | --- |
+| **Math** | `sin(x)`, `cos(x)`, `tan(x)`, `sqrt(x)`, `abs(x)`, `floor(x)`, `ceil(x)`, `sign(x)` | Standard math. |
+| **Conditional** | `if(condition, true_val, false_val)` | Ternary. |
+| **Random** | `rand()` → `[0,1]`, `randn()` → normal `(0,1)`, `randint(n)` → integer `[0,n-1]`, `randrange(n)` → float `[0,n]` | Random utilities. |
+| **Control / dynamic** | `lin`, `pid`, `mem`, `once`, `acceleration` | See [Functions](/agents/functions). |
+| **Runtime extensions** | `min(a,b)`, `max(a,b)` | Available in the Nimbus runtime; not part of the v0.2.0 spec table. |
+
+## Control outputs
+
+| Type | Example |
+| --- | --- |
+| **Single assignment** | `roll = 1500` |
+| **Multi assignment** | `roll = 1500; pitch = 1200; yaw = 800; throttle = 300; aux1 = 1600` |
+
+Notes (verbatim from the spec):
+
+- Multiple assignments are executed as-is.
+- A single assignment is compiled using the RHS expression only.
+
+You can write to outputs by their port name (`ax = ...`, `out_roll = ...`) **or** by the standard control names (`roll`, `pitch`, `yaw`, `throttle`, `aux1`, `aux2`). See [Control outputs](/agents/control-outputs).
+
+## Logic statements with outputs
+
+Logic statements compose with output assignments. Example:
+
+```text
+roll = if(time > 300 && parameter == 1, 1, 0); pitch = 1200; yaw = 900; throttle = 300;
+```
+
+## Errors that fail compilation or evaluation
+
+These will refuse to compile or will raise at evaluation time:
+
+- Unmatched parentheses.
+- Division by zero.
+- Unknown function or wrong argument count.
+- Empty expression.
+
+When this happens, the desktop app surfaces a red error on the offending block and pauses the agent if it was running. The drone reverts to the last good `roll/pitch/yaw/throttle/aux1` until you fix the expression.
+
+## Examples
+
+| Category | Expression |
+| --- | --- |
+| **Math** | `0.5 * (sin(time * 2.0) + 1) * 2000` |
+| **Logic / compare** | `if(time > 300 && parameter == 1, 1, 0)` |
+| **Randomized** | `992 + randrange(50)` |
+| **Control block** | `roll = 1500; pitch = 1200; yaw = 900; throttle = 300; aux1 = 1800;` |
+
+## Practical patterns
+
+### Halve an input
+
+```text
+input * 0.5
+```
+
+### Center sticks
+
+```text
+roll = 992; pitch = 992; yaw = 992; throttle = 200
+```
+
+### Track a vision target with PID
+
+```text
+yaw = pid(320, target_x, 0.8, 0.0, 0.1, 300)
+```
+
+### Ramp throttle linearly
+
+```text
+throttle = lin(172, 600, 2.0)
+```
+
+### Latch on first detection
+
+```text
+aux1 = mem(1800, target_visible, 0, 1)
+```
+
+### Once-only randomization
+
+```text
+roll = once(randrange(50)) - 25
+```
+
+## Where this syntax came from
+
+The spec is published in the public [`Droneforge-Inc/docs`](https://github.com/Droneforge-Inc/docs/blob/main/expression_rules_v0.2.0.md) repo. Future revisions will be versioned (`v0.3.0`, etc.) and the canonical document moved into this Mintlify site.

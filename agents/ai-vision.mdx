@@ -1,0 +1,105 @@
+---
+title: "AI Vision Modes"
+description: "YOLOv11 object detection and DepthAnything depth estimation, what they produce, how to wire them into expressions."
+icon: "eye"
+---
+
+The desktop app can run two AI vision models in real time on the live video feed coming back from the drone. Each turns into a structured set of variables that expressions can read.
+
+## Two modes
+
+<CardGroup cols={2}>
+  <Card title="YOLOv11 object detection" icon="object-group">
+    Real-time detection of object classes. Produces `target_x`, `target_y`, bounding box, confidence, history.
+  </Card>
+  <Card title="DepthAnything depth estimation" icon="cubes">
+    Per-pixel depth map summarized into a coarse grid. Produces `nav_*` variables for steering away from obstacles.
+  </Card>
+</CardGroup>
+
+You enable / disable each from the **Vision modes** button in the Build tab toolbar, see [Build tab → Build buttons](/app/build-tab).
+
+## YOLOv11
+
+The model classifies objects in the frame and emits bounding boxes for the configured target class. Outputs:
+
+| Variable | Type |
+| --- | --- |
+| `target_x`, `target_y` | Center pixel (x, y). |
+| `target_width`, `target_height`, `target_diag` | Bbox dimensions. |
+| `target_confidence` | [0, 1]. |
+| `target_visible` | `1.0` if any target this frame, else `0.0`. |
+| `target_*_last_n` | History over recent frames. |
+| `frames_since_detection` | Frames since last `target_visible == 1`. |
+
+### Typical patterns
+
+**Visual servoing (yaw onto target):**
+
+```text
+yaw = if(target_visible, pid(320, target_x, 0.8, 0.0, 0.1, 300), 992)
+```
+
+**Move forward when target is small (far), back off when it's large (close):**
+
+```text
+pitch = if(target_visible,
+           if(target_diag < 100, 1100,
+              if(target_diag > 250, 900, 992)),
+           992)
+```
+
+**Search yaw when no target visible:**
+
+```text
+yaw = if(target_visible,
+         pid(320, target_x, 0.8, 0.0, 0.1, 300),
+         992 + 200 * sin(time * 0.5))
+```
+
+## DepthAnything
+
+The model estimates per-pixel depth, summarized into a coarse grid. Outputs:
+
+| Variable | Type |
+| --- | --- |
+| `nav_target_x`, `nav_target_y` | Suggested aim point (pixel). |
+| `nav_max_depth` | Maximum depth in field of view. |
+| `nav_grid_row`, `nav_grid_col` | Recommended grid cell to aim at. |
+| `nav_left_depth`, `nav_right_depth`, `nav_center_depth` | Aggregate depths in three lateral thirds. |
+| `nav_data_valid` | `1.0` if estimation is currently usable. |
+
+### Typical patterns
+
+**Steer toward the deepest direction:**
+
+```text
+roll_offset = (nav_right_depth - nav_left_depth) * 0.5
+roll = if(nav_data_valid, 992 + roll_offset, 992)
+```
+
+**Brake when something close ahead:**
+
+```text
+pitch = if(nav_data_valid && nav_center_depth < 1.0, 900, 992)
+```
+
+**Combined with YOLOv11 (track target if visible, else steer toward open space):**
+
+```text
+roll = if(target_visible,
+          992,
+          if(nav_data_valid,
+             992 + 0.5 * (nav_right_depth - nav_left_depth),
+             992))
+```
+
+## Performance notes
+
+- Both models run **on the host**. GPU utilization is what limits FPS; an Apple Silicon laptop can run YOLOv11 at well over the 500 Hz link rate.
+- The **Vision modes** toggle disables a model when you don't need it. Disable DepthAnything if your agent only needs YOLOv11, that's most of an unused GPU back.
+- The depth grid is intentionally coarse. Treat `nav_left_depth` / `nav_right_depth` / `nav_center_depth` as steering hints, not metric depth measurements.
+
+## When neither model is enough
+
+Drop a trained policy into the agent (an ACT, Diffusion, Pi0, or SmolVLA checkpoint trained in `lerobot-fork`). See [Autonomy → Policies](/autonomy/policies). The policy's outputs become block outputs you can route to the control node like any other input.

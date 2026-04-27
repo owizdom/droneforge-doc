@@ -1,0 +1,157 @@
+---
+title: "Functions"
+description: "The full set of built-in functions in the Nimbus expression language, math, logic, control, dynamic state."
+icon: "function"
+---
+
+The expression language ships with a small library of functions. They fall into four groups: pure math, conditional, randomization, and *dynamic* (functions that maintain state between ticks).
+
+## Pure math
+
+| Function | Behavior |
+| --- | --- |
+| `sin(x)`, `cos(x)`, `tan(x)` | Trig (radians). |
+| `sqrt(x)` | Square root (`x ≥ 0`). |
+| `abs(x)` | Absolute value. |
+| `floor(x)`, `ceil(x)` | Round down / up. |
+| `sign(x)` | `−1.0`, `0.0`, or `1.0`. |
+| `min(a, b)`, `max(a, b)` | Two-argument min / max. |
+
+## Conditional
+
+### `if`
+
+```text
+if(condition, true_value, false_value)
+```
+
+Evaluates `condition`. Non-zero → returns `true_value`. Zero → returns `false_value`. Both branches are evaluated (no short-circuit), so don't put side-effecting calls in either side.
+
+```text
+pitch = if(target_visible, 1100, 992)
+```
+
+## Randomization
+
+| Function | Range |
+| --- | --- |
+| `rand()` | Float, uniform `[0, 1]`. |
+| `randn()` | Float, normal `(μ=0, σ=1)`. |
+| `randint(n)` | Integer, uniform `[0, n−1]`. |
+| `randrange(n)` | Float, uniform `[0, n]`. |
+
+Randomized expressions get a fresh value every tick, wrap in `once(...)` if you want a one-time draw:
+
+```text
+roll = once(randrange(50)) - 25
+```
+
+## Dynamic / control
+
+These maintain state across ticks.
+
+### `lin`
+
+```text
+lin(start, end, duration)
+```
+
+Linear ramp from `start` to `end` over `duration` seconds (since the agent started, or the last reset). After `duration` it stays at `end`.
+
+```text
+throttle = lin(172, 600, 2.0)
+```
+
+Use it to ramp throttle, sweep yaw, fade aux switches in.
+
+### `pid`
+
+```text
+pid(setpoint, process_variable, kp, ki, kd [, max_output])
+```
+
+Standard textbook PID controller. Returns a control signal saturated at `±max_output` if provided. State (integral, last-error) is per-call-site, so two `pid(...)` calls in different places maintain independent state.
+
+```text
+yaw = pid(320, target_x, 0.8, 0.0, 0.1, 300)
+```
+
+In the example, the setpoint is "image-center x = 320" and `target_x` is the YOLOv11 detection center. With `kp=0.8`, `ki=0`, `kd=0.1`, and saturation at ±300 around 992, this yaws the drone to keep the target centered.
+
+### `mem`
+
+```text
+mem(value [, condition [, reset [, edge_once]]])
+```
+
+A 1-cell memory.
+
+| Arg | Effect |
+| --- | --- |
+| `value` | The value to store when storing. |
+| `condition` | Store only when `condition` is non-zero. Default: every tick. |
+| `reset` | When non-zero, clear back to `value`. Default: never. |
+| `edge_once` | When `1`, only store on the *rising edge* of `condition`. Default: store any tick `condition` is true. |
+
+Common patterns:
+
+```text
+# Latch the first time a target appears
+locked_x = mem(target_x, target_visible, 0, 1)
+
+# Store the time we first saw the target
+detection_time = mem(time, target_visible, 0, 1)
+
+# Toggle a switch on (and never off)
+aux1 = mem(1800, throttle > 300)
+```
+
+### `once`
+
+```text
+once(expr)
+```
+
+Evaluates `expr` exactly once on the first tick the function is called and **caches the result forever** (within this agent run).
+
+```text
+home_x = once(target_x)
+```
+
+Useful for capturing initial conditions.
+
+### `acceleration`
+
+```text
+acceleration(desired_accel [, motor_efficiency])
+```
+
+Returns the throttle command needed to achieve `desired_accel` (vertical acceleration). `motor_efficiency` defaults to a sensible Whoop value; pass an override if you've characterized your specific drone.
+
+```text
+throttle = acceleration(0.5)        # mild climb
+throttle = acceleration(-0.2, 0.85) # gentle descent on a tuned airframe
+```
+
+This is the cleanest way to produce a vertical move that doesn't fight the FC's altitude controller.
+
+## Function composition
+
+All functions return numbers, so they compose as expected:
+
+```text
+roll = 992 + clamp(pid(320, target_x, 0.8, 0, 0.1, 300), -200, 200)
+```
+
+(There's no `clamp` built-in; use `min(max(x, lo), hi)`.)
+
+## Errors
+
+The following raise compilation or evaluation errors:
+
+- Wrong argument count (e.g., `pid(320)`, too few).
+- Unknown function name.
+- Division by zero in any call site.
+- Empty arguments (`if(, 1, 0)`, the parser will reject).
+
+When an error fires, the desktop app marks the offending block red and pauses the agent. See [Expression syntax → Errors](/agents/expression-syntax#errors-that-fail-compilation-or-evaluation).

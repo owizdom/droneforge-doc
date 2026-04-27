@@ -1,0 +1,110 @@
+---
+title: "Control Outputs"
+description: "How the control node turns an expression into RC channels. CRSF range, naming, flight modes, the aux switches."
+icon: "gamepad"
+---
+
+The control node is the only block in your agent that *commands the drone*. Its outputs are written to the Nimbus TX, packed into a CRSF channel frame, and sent down the link.
+
+## CRSF range
+
+All four primary channels share the same range:
+
+```
+172  ───────────────  992  ───────────────  1811
+ ↓                     ↓                      ↓
+low / left / back     center / neutral       high / right / forward
+```
+
+| Output | What ↑ does | What ↓ does |
+| --- | --- | --- |
+| `roll` | Roll right | Roll left |
+| `pitch` | Pitch forward | Pitch back |
+| `yaw` | Yaw clockwise (right) | Yaw counter-clockwise (left) |
+| `throttle` | Up | **Throttle low = 172**. Center is *not* hover throttle. |
+
+`throttle = 172` is full off. There is no negative throttle.
+
+## Aux channels
+
+`aux1` and (optionally) `aux2` carry mode switches:
+
+| Channel | Typical use |
+| --- | --- |
+| `aux1` | Arm / disarm. ≥ ~1800 typically arms; ≤ ~1000 disarms. |
+| `aux2` | Flight mode (`acro`, `angle`, `horizon`). |
+
+The expression spec exposes flight-mode constants you can write to `aux2`:
+
+| Constant | Meaning |
+| --- | --- |
+| `angle` | Self-leveling, attitude-controlled. |
+| `horizon` | Hybrid (angle near level, acro at high deflection). |
+| `acro` | Pure rate mode, no self-leveling. |
+
+Set them as:
+
+```text
+aux2 = angle
+```
+
+These are *named constants resolved by the expression compiler*, not strings or magic numbers, pick whichever the FC's CLI config expects.
+
+## Two ways to assign
+
+The control node supports **port names** and **standard names**:
+
+```text
+# port-named (whatever the block exposes)
+ax = ...
+out_roll = ...
+
+# standard names
+roll = ...
+pitch = ...
+yaw = ...
+throttle = ...
+aux1 = ...
+```
+
+Pick whichever is clearer in context. Both end up in the same CRSF frame.
+
+## Single vs multi assignment
+
+```text
+roll = 1500                                            # single, RHS expression only
+roll = 1500; pitch = 1200; yaw = 800; throttle = 300; aux1 = 1600   # multi, executed as-is
+```
+
+A single assignment is compiled into the expression evaluator as just the RHS. A multi-assignment is executed sequentially, order matters when later assignments reference earlier ones (rare in practice).
+
+## What happens when the expression fails
+
+If your control expression raises (division by zero, unknown function, etc.):
+
+- The desktop app marks the control node red.
+- The agent pauses (it stops emitting new commands).
+- The drone receives the **last successfully-emitted command** until you fix the expression.
+
+This is intentionally lenient, better to keep the last-known-good output than to suddenly cut throttle in mid-air.
+
+## Failsafe
+
+The control node does **not** implement an automatic failsafe. If the link itself drops, **Betaflight's failsafe takes over**, that's set in the FC's config (`failsafe_*` in CLI). Standard Betaflight failsafe (drop, descent, motor cut) applies.
+
+The DroneForge fork does not change failsafe semantics; it inherits whatever you've configured for the FC variant. See [Betaflight fork](/firmware/betaflight) for the variants.
+
+## Recommended starting point
+
+A minimum-viable control node:
+
+```text
+roll = 992
+pitch = 992
+yaw = 992
+throttle = 200
+aux1 = 1800
+aux2 = angle
+```
+
+This sticks the drone level, idles throttle low, arms via aux1, and runs in `angle` (self-level) mode. Replace the lines one at a time with expressions that reference your sensors and AI vision blocks.

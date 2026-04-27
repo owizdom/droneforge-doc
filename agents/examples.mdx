@@ -1,0 +1,166 @@
+---
+title: "Example Agents"
+description: "Copy-pasteable agent expressions for common behaviors, orbit, follow, search-and-land, hover-hold, sinusoidal scan."
+icon: "wand-magic-sparkles"
+---
+
+Each example below is a complete expression block. Drop it into the control node of an empty agent (with the listed prerequisite blocks wired up), save, and deploy.
+
+<Warning>
+  These are demonstrations, not certified safe maneuvers. Always test over a soft, open area first.
+</Warning>
+
+## Hover in place
+
+**Prereq:** none.
+
+```text
+roll = 992
+pitch = 992
+yaw = 992
+throttle = 200
+aux1 = 1800
+aux2 = angle
+```
+
+Sticks neutral, throttle low (the FC's angle-mode altitude hold takes over once optical flow is locked). Useful as a baseline before any other agent.
+
+## Center on a YOLOv11 target
+
+**Prereq:** YOLOv11 vision mode on, target class configured.
+
+```text
+roll  = 992
+pitch = if(target_visible, 1050, 992)
+yaw   = if(target_visible, pid(320, target_x, 0.8, 0.0, 0.1, 300), 992)
+throttle = 220
+aux1 = 1800
+aux2 = angle
+```
+
+Yaws to keep the target's pixel-x at 320 (image center for 640-wide frames), with a gentle forward lean while a target is in view.
+
+## Search-and-find (sinusoidal yaw scan)
+
+**Prereq:** YOLOv11 vision mode on.
+
+```text
+search_yaw = 992 + 200 * sin(time * 0.5)
+
+roll  = 992
+pitch = 992
+yaw   = if(target_visible,
+           pid(320, target_x, 0.8, 0.0, 0.1, 300),
+           search_yaw)
+throttle = 220
+aux1 = 1800
+aux2 = angle
+```
+
+Sweeps yaw left-right at 0.5 rad/s while no target is visible; locks on with a PID loop the moment one appears.
+
+## Search-and-land
+
+**Prereq:** YOLOv11 + rangefinder (or `optrange_distance`).
+
+```text
+locked = mem(1, target_visible, 0, 1)         # latch on first detection
+near   = if(target_diag > 250, 1, 0)          # target looks big → close
+
+roll  = 992
+pitch = if(target_visible && !near, 1080, 992)
+yaw   = if(target_visible, pid(320, target_x, 0.8, 0.0, 0.1, 300), 992)
+
+throttle = if(locked && near && rangefinder_valid && rangefinder_distance < 0.4,
+              172,                            # cut to land
+              if(locked && near, 200, 220))   # descend slowly when close
+
+aux1 = if(rangefinder_distance < 0.05, 1000, 1800)   # disarm just above touchdown
+aux2 = angle
+```
+
+Approaches the target until it looks large (>250 px diagonal), descends slowly while the rangefinder reads less than 40 cm, cuts throttle below 5 cm, then disarms. Tune `target_diag > 250` and the rangefinder thresholds to your specific drone and target.
+
+## Hover-hold over a textured surface
+
+**Prereq:** optical-flow sensor (BF fork's Micolink driver), `flow_*` populated.
+
+```text
+flow_gain = 0.5
+
+roll  = if(flow_valid, 992 - flow_gain * flow_x, 992)
+pitch = if(flow_valid, 992 - flow_gain * flow_y, 992)
+yaw   = 992
+throttle = if(altitude_valid && altitude < 1.0, 250, 200)
+aux1 = 1800
+aux2 = angle
+```
+
+Counters horizontal drift using optical flow. The throttle line nudges up when altitude drops below 1 m. Tune `flow_gain` to your airframe (start small).
+
+## Orbit around a fixed point
+
+**Prereq:** YOLOv11 (target = the orbit center).
+
+```text
+orbit_speed = 0.5  # rad/s
+
+# Yaw to keep the orbit center on screen
+yaw = if(target_visible, pid(320, target_x, 0.5, 0.0, 0.1, 200), 992)
+
+# Roll right while target is visible (tangent to the orbit)
+roll  = if(target_visible, 1100, 992)
+pitch = if(target_visible, 1020, 992)
+
+throttle = 220
+aux1 = 1800
+aux2 = angle
+```
+
+The roll-right + yaw-correction combination produces a circular path around whatever YOLOv11 is tracking. Slower, gentler PID gains than a center-on agent, orbit shouldn't oscillate.
+
+## Linear ramp altitude
+
+**Prereq:** none. Pairs with `aux1 = 1800` to start armed.
+
+```text
+roll = 992
+pitch = 992
+yaw = 992
+# Ramp throttle from 172 to 600 over 2 seconds, then hold
+throttle = lin(172, 600, 2.0)
+aux1 = 1800
+aux2 = angle
+```
+
+A gentle vertical takeoff. After 2 seconds, throttle stays at 600 (around hover for many micro-Whoops). Pair with `acceleration(...)` for finer control.
+
+## Wall-following with depth
+
+**Prereq:** DepthAnything vision mode on.
+
+```text
+target_balance = nav_left_depth - nav_right_depth
+roll_correction = 0.5 * target_balance
+
+roll  = if(nav_data_valid, 992 + roll_correction, 992)
+pitch = if(nav_data_valid, 1050, 992)
+yaw   = 992
+throttle = 220
+aux1 = 1800
+aux2 = angle
+```
+
+Steers toward whichever side has more depth (open space). Pair with a center-depth check to avoid head-on collisions:
+
+```text
+pitch = if(nav_data_valid && nav_center_depth > 1.5, 1080,
+           if(nav_data_valid && nav_center_depth < 1.0, 900, 992))
+```
+
+## Patterns to reuse
+
+- **Validity gating:** every input has a `*_valid` companion. Use `if(valid, real_value, neutral)` defensively.
+- **`mem` for latches:** turn an instantaneous condition into a sticky state.
+- **`once` for initial conditions:** capture starting telemetry at agent-start to compare against later.
+- **PID for visual servoing:** tune `kp` first, add `kd` only once you see oscillation, leave `ki = 0` unless you have a steady offset.

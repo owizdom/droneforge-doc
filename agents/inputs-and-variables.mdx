@@ -1,0 +1,148 @@
+---
+title: "Inputs and Variables"
+description: "Every read-only value an expression can reference. Sensors, telemetry, vision, navigation, optical flow."
+icon: "list-tree"
+---
+
+Inputs are referenced by name in expressions. They come from three places:
+
+1. **Block I/O**, connected outputs of upstream blocks (`speed`, `error`, your own port names).
+2. **UI parameters**, fields on the node configured in the app (their key names become variables).
+3. **Built-in runtime variables**, telemetry, vision, attitude, etc., listed below.
+
+If a value isn't currently valid (sensor disconnected, vision not detecting), most variables are accompanied by a `*_valid` companion (`1.0` if valid, `0.0` if not). **Always gate logic on validity** before using stale data.
+
+## Built-in constants
+
+| Constant | Meaning |
+| --- | --- |
+| `pi` / `PI` | π (case-insensitive) |
+| `angle`, `horizon`, `acro` | Flight-mode constants for `aux2` (see [Control outputs](/agents/control-outputs)). |
+
+## Time and battery
+
+| Variable | Meaning |
+| --- | --- |
+| `time` | Runtime seconds since this node started running. |
+| `battery` / `battery_level` | Percentage. |
+| `battery_voltage` | Volts. |
+
+## Attitude and IMU
+
+| Variable | Meaning |
+| --- | --- |
+| `attitude_roll` | Roll angle in degrees. |
+| `attitude_pitch` | Pitch angle in degrees. |
+| `attitude_yaw` | Yaw angle in degrees. |
+| `sensor_roll`, `sensor_pitch`, `sensor_yaw` | Aliases for `attitude_*`. |
+
+## Vision target, current frame
+
+YOLOv11 detection results for the currently selected target class.
+
+| Variable | Meaning |
+| --- | --- |
+| `target_x`, `target_y` | Target center, image coordinates (px). |
+| `target_width`, `target_height`, `target_diag` | Target bounding box size. |
+| `target_confidence` | Detection confidence [0, 1]. |
+| `target_visible` | `1.0` if a target is currently detected, else `0.0`. |
+
+## Vision target, history
+
+Same as above but historical (last *n* frames). Useful for smoothing or first-detection latching.
+
+| Variable | Meaning |
+| --- | --- |
+| `target_x_last_n`, `target_y_last_n` | Recent center positions. |
+| `target_width_last_n`, `target_height_last_n`, `target_diag_last_n` | Recent bbox sizes. |
+| `target_confidence_last_n` | Recent confidence. |
+| `target_visible_last_n` | `1.0` / `0.0` per frame. |
+| `frames_since_detection` | Frames since `target_visible` was last `1.0`. |
+
+## Height estimation (VIHO)
+
+VIHO is the visual-inertial height observer. It fuses vision and inertial signals into floor/ceiling distance estimates and a derived height value.
+
+| Variable | Meaning |
+| --- | --- |
+| `floor_distance` | Estimated distance to the floor. |
+| `ceiling_distance` | Estimated distance to the ceiling. |
+| `height_data_valid` | `1.0` if VIHO is currently estimating reliably, else `0.0`. |
+| `viho_height` | The runtime's derived VIHO height value (use as-is, do not assume an exact algebraic relationship to floor/ceiling distance). |
+
+## Depth navigation
+
+DepthAnything outputs structured into a steering grid.
+
+| Variable | Meaning |
+| --- | --- |
+| `nav_target_x`, `nav_target_y` | Suggested aim in image coordinates. |
+| `nav_max_depth` | Maximum depth in the field of view. |
+| `nav_grid_row`, `nav_grid_col` | Cell of the depth grid most recommended for forward motion. |
+| `nav_data_valid` | `1.0` if depth estimation is currently producing useful output. |
+| `nav_left_depth`, `nav_right_depth`, `nav_center_depth` | Aggregate depth in left / right / center thirds, handy for "which way is open". |
+
+## Optical flow
+
+From the FC's optical-flow driver (Micolink protocol on the BF fork).
+
+| Variable | Meaning |
+| --- | --- |
+| `flow_x`, `flow_y` | Flow vector components. |
+| `flow_magnitude` | √(flow_x² + flow_y²). |
+| `flow_angle` | Direction in radians. |
+| `flow_valid` | `1.0` / `0.0` based on sensor confidence. |
+
+## Rangefinder
+
+| Variable | Meaning |
+| --- | --- |
+| `rangefinder_distance` | Distance below the drone. |
+| `rangefinder_strength` | Signal strength from the rangefinder. |
+| `rangefinder_valid` | `1.0` / `0.0`. |
+
+## Velocity, acceleration, altitude
+
+| Variable | Meaning |
+| --- | --- |
+| `vel_x`, `vel_y`, `vel_z` | Estimated velocity components (FC frame). |
+| `vel_valid` | `1.0` / `0.0`. |
+| `accel_x`, `accel_y`, `accel_z` | Acceleration components. |
+| `accel_valid` | `1.0` / `0.0`. |
+| `altitude` | Estimated altitude (above ground or barometric, FC-dependent). |
+| `altitude_valid` | `1.0` / `0.0`. |
+
+## Optical range (`optrange`)
+
+The OPTRANGE telemetry frame from the BF fork. These are *raw* sensor values, distinct from the integrated `flow_*` set.
+
+| Variable | Meaning |
+| --- | --- |
+| `optrange_distance` | Distance from optical-range sensor (mm or cm, FC-dependent). |
+| `optrange_velX`, `optrange_velY` | Sensor-reported XY velocities. |
+| `optrange_vz_measured` | Sensor-reported vertical velocity. |
+| `optrange_valid` | `1.0` / `0.0`. |
+
+## Patterns
+
+### Always check validity first
+
+```text
+yaw = if(target_visible, pid(320, target_x, 0.8, 0.0, 0.1, 300), 992)
+pitch = if(target_visible && target_diag < 150, 1100, 992)
+```
+
+### Compose two sensors safely
+
+```text
+hover = if(flow_valid && altitude_valid, 1, 0)
+roll = if(hover, 992 - 0.5 * flow_x, 992)
+```
+
+### Latch on first valid detection
+
+```text
+locked_target_x = mem(target_x, target_visible, 0, 1)
+```
+
+`mem(value, condition, reset, edge_once)` stores `target_x` the first time `target_visible` becomes true and holds it. See [Functions → mem](/agents/functions#mem).

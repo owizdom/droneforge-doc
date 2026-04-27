@@ -1,0 +1,95 @@
+---
+title: "Nimbus Map (Agents)"
+description: "What the agent system is, how the node graph evaluates, and where expressions fit in."
+icon: "diagram-project"
+---
+
+The **Nimbus Map** is the agent runtime that lives in the DroneForge desktop app. It's a visual node graph: blocks for sensors, blocks for AI vision, blocks for math, and *one* control node that produces the four channels Nimbus puts on the link every cycle.
+
+You build agents in the **Build** tab. You run them in the **Deploy** tab.
+
+## Three rules
+
+<Steps>
+  <Step title="Every agent ends with a control node">
+    There is exactly one control node per agent. Its outputs are `roll`, `pitch`, `yaw`, `throttle`, `aux1` (and optionally `aux2`).
+
+    Without a control node, the agent has no way to fly the drone.
+  </Step>
+  <Step title="Connections feed values forward">
+    Each block reads from blocks it's connected to. When you draw a line from block A's output to block B's input, B can reference that value by the input's name in its expression (e.g., `input * 0.5` if the input is named `input`).
+  </Step>
+  <Step title="The graph evaluates in topological order, in a tight loop">
+    Each tick:
+    1. Every node is evaluated in dependency order.
+    2. The control node emits `roll/pitch/yaw/throttle/aux1`.
+    3. Those values are written to the Nimbus TX over USB.
+
+    This loop runs until the agent is paused or replaced.
+  </Step>
+</Steps>
+
+## The four building blocks
+
+<CardGroup cols={2}>
+  <Card title="Sensor / input blocks" icon="signal">
+    Surface live data: vision targets, depth, optical flow, attitude, IMU, battery, time. See [Inputs and variables](/agents/inputs-and-variables).
+  </Card>
+  <Card title="Math / logic blocks" icon="square-root-variable">
+    Combine inputs into derived values via expressions: `pid(...)`, `lin(...)`, `if(...)`, `mem(...)`. See [Functions](/agents/functions).
+  </Card>
+  <Card title="AI vision blocks" icon="eye">
+    Run YOLOv11 object detection or DepthAnything depth estimation on the live video feed. Their outputs become `target_*` and `nav_*` variables in expressions. See [AI Vision](/agents/ai-vision).
+  </Card>
+  <Card title="Control node" icon="gamepad">
+    The single sink. Emits `roll/pitch/yaw/throttle/aux1` (and optionally `aux2`) in CRSF range. See [Control outputs](/agents/control-outputs).
+  </Card>
+</CardGroup>
+
+## The expression language
+
+Inside every block (sensor blocks aside, which produce values directly), you write **expressions**, small math/logic statements that read inputs and produce outputs. They look like:
+
+```text
+roll = pid(320, target_x, 0.8, 0.0, 0.1, 300)
+pitch = if(target_visible, 1100, 992)
+throttle = 200
+aux1 = mem(1800, target_visible, 0, 1)
+```
+
+The full language is documented in [Expression syntax](/agents/expression-syntax) and [Functions](/agents/functions). It is small on purpose: enough to express PID loops, time-based ramps, latches, and conditional logic, not so much that agents become unreadable.
+
+## A complete simple agent
+
+A pseudo-graph with three nodes:
+
+```text
+[ Vision: YOLOv11 (find: bike) ]   →   [ Math node ]   →   [ Control node ]
+```
+
+The Math node has one expression block:
+
+```text
+yaw_cmd = pid(320, target_x, 0.8, 0.0, 0.1, 300)
+pitch_cmd = if(target_visible, 1100, 992)
+```
+
+The Control node:
+
+```text
+roll = 992
+pitch = pitch_cmd
+yaw = yaw_cmd
+throttle = if(target_visible && target_diag > 200, 180, 220)
+aux1 = 1800
+```
+
+What it does: yaws toward whatever YOLOv11 detects with the label `bike`, leans forward when a bike is visible, descends a touch when it gets close (`target_diag > 200`), and stays armed (`aux1 = 1800`).
+
+## Where agents live
+
+Agents are JSON files. The desktop app's Build tab lets you save them locally and (with an account) sync them to cloud storage. The Community tab lists agents others have published. See [Cloud storage and Community](/app/community-tab).
+
+## Safety
+
+The control node *always* outputs the latest result of its expressions. There is no implicit interpolation, no smoothing, no failsafe baked in. **The expressions you write are the agent.** Test in a safe area before flying close to anything you don't want broken.
